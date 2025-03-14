@@ -6,6 +6,11 @@ import dev.brahmkshatriya.echo.extension.Work
 import dev.brahmkshatriya.echo.extension.WorksResponse
 import me.bush.translator.Language
 import me.bush.translator.Translator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
 
 
 suspend fun Work.translate(): Work {
@@ -53,13 +58,117 @@ suspend fun MediaTreeItem.Folder.translate(): MediaTreeItem.Folder {
     return this
 }
 
+private val translationCache = TimeBasedLRUCache<Map<String, String>>(1000)
+
 suspend fun translateList(list: List<String>): Map<String, String>? {
+    if (list.isEmpty()) {
+        return emptyMap()
+    }
+    val cacheKey = list.joinToString("").hashCode().toString()
+    translationCache.get(cacheKey)?.let { cachedTranslation ->
+        if (list.all { cachedTranslation.containsKey(it) }) {
+            println("asmr-logging: Translation cache hit")
+            return cachedTranslation
+        }
+    }
+
     val translator = Translator()
-    val titleString = list.joinToString("\n")
-    val translated = translator.translate(titleString, Language.ENGLISH, Language.AUTO)
-    val translatedList = translated.translatedText.split("\n")
-    if (translatedList.size != list.size) return null
-    return list.zip(translatedList).toMap()
+    val chunks = splitIntoChunks(list)
+
+    return withContext(Dispatchers.IO) {
+        coroutineScope {
+            val translatedChunks = chunks.map { chunk ->
+                async {
+                    val titleString = chunk.joinToString("\n")
+
+                    val translatedCatch = translator.translateCatching(
+                        titleString, Language.ENGLISH, Language.AUTO)
+
+                    if (translatedCatch.isFailure) {
+                        val exception = translatedCatch.exceptionOrNull()
+                        println("asmr-logging: Translation failed: $exception")
+                        return@async null
+                    }
+
+                    val translated = translatedCatch.getOrNull() ?: return@async null
+                    translated.translatedText.split("\n")
+                }
+            }.awaitAll()
+
+            if (translatedChunks.any { it == null }) {
+                return@coroutineScope null
+            }
+
+            val allTranslatedItems = translatedChunks.filterNotNull().flatten()
+
+            if (allTranslatedItems.size != list.size) {
+                println("asmr-logging: Translation count mismatch. Original: ${list.size}, Translated: ${allTranslatedItems.size}")
+                return@coroutineScope null
+            }
+            val result = list.zip(allTranslatedItems).toMap()
+            translationCache.put(cacheKey, result)
+            result
+        }
+    }
+}
+
+private fun splitIntoChunks(list: List<String>): List<List<String>> {
+    val chunks = mutableListOf<List<String>>()
+    val currentChunk = mutableListOf<String>()
+    var currentLength = 0
+    val maxLength = 1800
+
+    val totalLength = list.sumOf { it.length } + (list.size - 1)
+    if (totalLength <= maxLength) {
+        return listOf(list)
+    }
+
+    for (item in list) {
+        // +1 for the newline character that will be added when joining
+        val itemLength = item.length + (if (currentChunk.isEmpty()) 0 else 1)
+
+        if (currentLength + itemLength > maxLength && currentChunk.isNotEmpty()) {
+            chunks.add(currentChunk.toList())
+            currentChunk.clear()
+            currentLength = 0
+        }
+
+        currentChunk.add(item)
+        currentLength += itemLength
+    }
+
+    if (currentChunk.isNotEmpty()) {
+        chunks.add(currentChunk.toList())
+    }
+
+    // Second pass: balance the last two chunks if needed
+    if (chunks.size > 1) {
+        val lastChunk = chunks.removeAt(chunks.size - 1)
+        val secondLastChunk = chunks.removeAt(chunks.size - 1)
+
+        if (lastChunk.size < secondLastChunk.size / 3) { // Arbitrary threshold
+            val combined = secondLastChunk + lastChunk
+            val halfSize = combined.size / 2
+
+            var firstHalfLength = 0
+            var splitIndex = 0
+            for (i in combined.indices) {
+                val itemLength = combined[i].length + (if (i > 0) 1 else 0)
+                if (firstHalfLength + itemLength > maxLength || i >= halfSize) {
+                    splitIndex = i
+                    break
+                }
+                firstHalfLength += itemLength
+            }
+            chunks.add(combined.subList(0, splitIndex))
+            chunks.add(combined.subList(splitIndex, combined.size))
+        } else {
+            chunks.add(secondLastChunk)
+            chunks.add(lastChunk)
+        }
+    }
+
+    return chunks
 }
 
 fun MediaTreeItem.Folder.applyTranslations(translationMap: Map<String, String>) {

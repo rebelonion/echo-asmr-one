@@ -1,12 +1,17 @@
 package dev.brahmkshatriya.echo.extension.helpers
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
+import dev.brahmkshatriya.echo.common.models.EchoMediaItem.Companion.toMediaItem
+import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.extension.AsmrApi
+import dev.brahmkshatriya.echo.extension.AsmrPlaylist
 import dev.brahmkshatriya.echo.extension.MediaTreeItem
 import dev.brahmkshatriya.echo.extension.Tag
 import dev.brahmkshatriya.echo.extension.Work
@@ -79,5 +84,52 @@ fun WorksResponse.filterToSubtitled(filter: Boolean): WorksResponse {
     return WorksResponse(
         works = works.filter { it.hasSubtitle },
         pagination = pagination
+    )
+}
+
+fun Tag.toShelf(asmrApi: AsmrApi): Shelf.Category {
+    return Shelf.Category(
+        title = i18n.enUs.name ?: name,
+        items = PagedData.Continuous { continuation ->
+            val contInt = continuation?.toIntOrNull() ?: 0
+            val newResponse = asmrApi.searchWorks(contInt + 1, keyword = "\$tag:${i18n.enUs.name ?: name}\$")
+            val mediaItems: List<EchoMediaItem.Lists.AlbumItem> =
+                newResponse.works.map { it.toAlbum().toMediaItem() }
+            val newContinuation =
+                if (newResponse.pagination.currentPage * newResponse.pagination.pageSize < newResponse.pagination.totalCount) {
+                    (contInt + 1).toString()
+                } else null
+            Page(
+                data = mediaItems.map { it.toShelf() },
+                continuation = newContinuation
+            )
+        }
+    )
+}
+
+
+
+fun Work.createDescription(): String {
+    return "Tags: ${tags.joinToString { it.i18n.enUs.name ?: it.name }}\n" +
+            "Full Title: ${title}\n" +
+            "Downloads: $dlCount, Price: $price, Reviews: $reviewCount, Rating: $rateAverage2dp\n"
+}
+
+fun AsmrPlaylist.toMediaItem(): EchoMediaItem.Lists.PlaylistItem {
+    val parsedName = when(name) {
+        "__SYS_PLAYLIST_MARKED" -> "Marked"
+        "__SYS_PLAYLIST_LIKED" -> "Liked"
+        else -> name
+    }
+    return EchoMediaItem.Lists.PlaylistItem(
+        Playlist(
+            id = id,
+            title = parsedName,
+            cover = mainCoverUrl.buildImageHolder(),
+            description = description,
+            creationDate = createdAt.toDate(),
+            isPrivate = privacy != 0,
+            isEditable = false
+        )
     )
 }

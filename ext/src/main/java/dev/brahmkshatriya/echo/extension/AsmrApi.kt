@@ -1,13 +1,14 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.settings.Settings
+import dev.brahmkshatriya.echo.extension.helpers.TimeBasedLRUCache
 import dev.brahmkshatriya.echo.extension.helpers.deepCopy
 import dev.brahmkshatriya.echo.extension.helpers.filterToSubtitled
-import dev.brahmkshatriya.echo.extension.helpers.findMainAudioFolder
 import dev.brahmkshatriya.echo.extension.helpers.removeEmptyFolders
 import dev.brahmkshatriya.echo.extension.helpers.translate
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import io.ktor.http.URLBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -16,14 +17,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.Date
+import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.TimeUnit.SECONDS
 
-class AsmrApi(
-    private val uuid: String = UUID.randomUUID().toString()
-) {
-    private val baseUrl = "https://api.asmr-200.com/api"
+class AsmrApi {
+    private var uuid: String = UUID.randomUUID().toString()
+    private var token: String? = null
+    private val baseUrl = "https://api.${getMirror()}.com/api"
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, SECONDS)
         .readTimeout(10, SECONDS)
@@ -34,11 +35,18 @@ class AsmrApi(
     }
     private var settings: Settings? = null
 
+    fun updateUser(newUuid: String?, newToken: String?) {
+        uuid = newUuid ?: UUID.randomUUID().toString()
+        token = newToken
+    }
+
     ////--------------------------------------------------------------------------------------------
     //// settings api functions
     fun initSettings(settings: Settings) {
         this.settings = settings
     }
+
+    private fun getMirror() = settings?.getString("siteMirror") ?: "asmr-200"
 
     private fun SortOrder.onlyShowSfw(): String {
         val onlySfw = settings!!.getBoolean("onlyShowSfw")
@@ -64,17 +72,29 @@ class AsmrApi(
 
     ////--------------------------------------------------------------------------------------------
     //// raw api functions
-    private val workTreeCache = mutableMapOf<String, Pair<Date, MediaTreeItem.Folder>>()
-    private val workTreeCacheLimit = 20
-    private val cacheMutex = Mutex()
+    fun login(name: String, password: String): LoginResponse {
+        val url = "https://api.asmr.one/api/auth/me"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "name" to name,
+                "password" to password
+            )
+        )
+        try {
+            return sendRequest<LoginResponse>(url, RequestType.POST, body)
+        } catch (e: Exception) {
+            throw Exception("Failed to login: ${e.message}")
+        }
+    }
+
+
+    private val workTreeCache = TimeBasedLRUCache<MediaTreeItem.Folder>(20)
     suspend fun getWorkMediaTree(workId: String): MediaTreeItem.Folder {
         val url = "$baseUrl/tracks/$workId?v=1"
-        cacheMutex.withLock {
-            if (workTreeCache.containsKey(workId)) {
-                workTreeCache[workId]!!.first.time = Date().time
-                return workTreeCache[workId]!!.second.deepCopy()
-            }
+        workTreeCache.get(workId)?.let { cachedFolder ->
+            return cachedFolder.deepCopy()
         }
+
         val response: List<MediaTreeItem> = sendRequest(url, RequestType.GET)
         val folders = MediaTreeItem.Folder(
             "folder",
@@ -83,14 +103,9 @@ class AsmrApi(
             response
         ).removeEmptyFolders()
             .translate()
-        val mainFolder = folders.findMainAudioFolder()
-        cacheMutex.withLock {
-            workTreeCache[workId] = Pair(Date(), folders.deepCopy())
-            if (workTreeCache.size > workTreeCacheLimit) {
-                val oldest = workTreeCache.minByOrNull { it.value.first.time }!!.key
-                workTreeCache.remove(oldest)
-            }
-        }
+
+        workTreeCache.put(workId, folders.deepCopy())
+
         return folders
     }
 
@@ -177,7 +192,10 @@ class AsmrApi(
         includeTranslationWorks: Boolean = true,
         //withPlaylistStatus: List<> = emptyList()
     ): WorksResponse {
-        val url = parametersBuilder("$baseUrl/search/$keyword",
+        val url = parametersBuilder(
+            withContext(Dispatchers.IO) {
+                "$baseUrl/search/${keyword.encodeKeyword()}"
+            },
             mapOf(
                 "page" to page,
                 "order" to order.onlyShowSfw(),
@@ -188,7 +206,7 @@ class AsmrApi(
                 //"withPlaylistStatus[]" to withPlaylistStatus
             )
         )
-        //println("asmrone-logging: $url")
+        //println("asmr-logging: $url")
         return sendRequest<WorksResponse>(url, RequestType.GET)
             .filterToSubtitled(onlySubtitled())
             .translate()
@@ -215,19 +233,56 @@ class AsmrApi(
             .translate()
     }
 
+    fun getPlaylists(
+        page: Int = 1,
+        pageSize: Int = 96,
+        filterBy: String = "all"
+    ): PlaylistsResponse? {
+        if (token == null) {
+            return null
+        }
+        val url = parametersBuilder(
+            "https://api.asmr.one/api/playlist/get-playlists",
+            mapOf(
+                "page" to page,
+                "pageSize" to pageSize,
+                "filterBy" to filterBy
+            )
+        )
+        return sendRequest(url, RequestType.GET)
+    }
+
+    suspend fun getPlaylistWorks(
+        playlistId: String,
+        page: Int = 1,
+        pageSize: Int = 12
+    ): WorksResponse {
+        val url = parametersBuilder(
+            "https://api.asmr.one/api/playlist/get-playlist-works",
+            mapOf(
+                "id" to playlistId,
+                "page" to page,
+                "pageSize" to pageSize
+            )
+        )
+        return sendRequest<WorksResponse>(url, RequestType.GET)
+            .filterToSubtitled(onlySubtitled())
+            .translate()
+    }
+
     private var tagsCache: List<Tag>? = null
     fun getTags(): List<Tag> {
         val url = "$baseUrl/tags/"
         if (tagsCache != null) {
             return tagsCache!!
         }
-        val response = sendRequest<List<Tag>>(url, RequestType.GET)
+        val response = sendRequest<List<Tag>>(url, RequestType.GET).sortedBy { it.i18n.enUs.name ?: it.name }
         tagsCache = response
         return response
     }
 
     fun getSubTitleFile(url: String): String {
-        val request = requestBuilder(url, RequestType.GET, host = null)
+        val request = requestBuilder(url, RequestType.GET)
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
             throw Exception("Failed to send request: ${response.code}: ${response.body.string()}")
@@ -237,6 +292,10 @@ class AsmrApi(
 
     ////--------------------------------------------------------------------------------------------
     //// helper functions
+    private fun String.encodeKeyword(): String {
+        return URLEncoder.encode(this, "UTF-8").replace("+", "%20")
+    }
+
     private enum class RequestType {
         GET,
         POST,
@@ -249,8 +308,8 @@ class AsmrApi(
         type: RequestType,
         body: RequestBody? = null,
         headers: Map<String, String> = emptyMap(),
-        host: String? = "api.asmr-200.com"
     ): Request {
+        val host = if (url.contains("api.${getMirror()}")) "api.${getMirror()}.com" else null
         val requestBuilder = Request.Builder().url(url)
         headers.forEach { (key, value) -> requestBuilder.addHeader(key, value) }
         val requestBody = if (body != null) {
@@ -266,6 +325,9 @@ class AsmrApi(
             requestBuilder.addHeader("Host", host)
         }
         requestBuilder.addHeader("Content-Type", "application/json")
+        if (token != null) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
         return when (type) {
             RequestType.GET -> requestBuilder.get()
             RequestType.POST -> requestBuilder.post(requestBody)
@@ -288,13 +350,16 @@ class AsmrApi(
     }
 
     private fun parametersBuilder(url: String, parameters: Map<String, Any>): String {
-        return parameters.entries.joinToString("&") { (key, value) -> "$key=$value" }.let {
-            if (url.contains("?")) {
-                "$url&$it"
-            } else {
-                "$url?$it"
+        val builder = URLBuilder(url)
+        parameters.forEach { (key, value) ->
+            when (value) {
+                is String -> builder.parameters.append(key, value)
+                is Number -> builder.parameters.append(key, value.toString())
+                is Boolean -> builder.parameters.append(key, value.toString())
+                else -> throw IllegalArgumentException("Unsupported type: ${value::class}")
             }
         }
+        return builder.buildString()
     }
 
     private inline fun <reified T> sendRequest(

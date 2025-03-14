@@ -1,7 +1,78 @@
 package dev.brahmkshatriya.echo.extension
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonTransformingSerializer
+import kotlinx.serialization.json.buildJsonArray
+
+
+@Serializable
+data class AsmrPlaylist(
+    @SerialName("id")
+    val id: String,
+    @SerialName("user_name")
+    val userName: String,
+    @SerialName("privacy")
+    val privacy: Int,
+    @SerialName("locale")
+    val locale: String,
+    @SerialName("playback_count")
+    val playbackCount: Int,
+    @SerialName("name")
+    val name: String,
+    @SerialName("description")
+    val description: String,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("works_count")
+    val worksCount: Int,
+    @SerialName("latestWorkID")
+    val latestWorkID: Int?,
+    @SerialName("mainCoverUrl")
+    val mainCoverUrl: String
+)
+
+@Serializable
+data class PlaylistsResponse(
+    @SerialName("playlists")
+    val playlists: List<AsmrPlaylist>,
+    @SerialName("pagination")
+    val pagination: Pagination
+)
+
+////--------------------------------------------------------------------------------------------
+
+@Serializable
+data class User(
+    @SerialName("loggedIn")
+    val loggedIn: Boolean,
+    @SerialName("name")
+    val name: String,
+    @SerialName("group")
+    val group: String,
+    @SerialName("email")
+    val email: String?,
+    @SerialName("recommenderUuid")
+    val recommenderUuid: String
+)
+
+@Serializable
+data class LoginResponse(
+    @SerialName("user")
+    val user: User,
+    @SerialName("token")
+    val token: String
+)
+
+////--------------------------------------------------------------------------------------------
 
 @Serializable
 sealed class MediaTreeItem {
@@ -99,8 +170,9 @@ data class WorksResponse(
 )
 
 @Serializable
-data class Pagination(
+data class Pagination @OptIn(ExperimentalSerializationApi::class) constructor(
     @SerialName("currentPage")
+    @JsonNames("page")
     val currentPage: Int,
     @SerialName("pageSize")
     val pageSize: Int,
@@ -144,6 +216,7 @@ data class Work(
     val vas: List<VA>,
     @SerialName("tags")
     val tags: List<Tag>,
+    @Serializable(with = LanguageEditionsDeserializer::class)
     @SerialName("language_editions")
     val languageEditions: List<LanguageEdition>,
     @SerialName("original_workno")
@@ -177,6 +250,23 @@ data class Work(
     @SerialName("mainCoverUrl")
     val mainCoverUrl: String
 )
+
+object LanguageEditionsDeserializer : JsonTransformingSerializer<List<LanguageEdition>>(ListSerializer(LanguageEdition.serializer())) {
+    override fun transformDeserialize(element: JsonElement): JsonElement {
+        if (element is JsonArray) {
+            return element
+        }
+        if (element is JsonObject) {
+            val array = buildJsonArray {
+                element.entries.forEach { (_, value) ->
+                    add(value)
+                }
+            }
+            return array
+        }
+        return JsonArray(emptyList())
+    }
+}
 
 @Serializable
 data class Rank(

@@ -15,6 +15,10 @@ fun String.toDate(): Date {
     return Date(
         year = parts[0].toInt(),
         month = parts[1].toInt(),
-        day = parts[2].toInt()
+        day = parts[2].split(" ").first().toInt()
     )
+}
+
+fun <T> T.listOf(): List<T> {
+    return listOf(this)
 }

@@ -4,7 +4,9 @@ import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
+import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
+import dev.brahmkshatriya.echo.common.clients.PlaylistClient
 import dev.brahmkshatriya.echo.common.clients.RadioClient
 import dev.brahmkshatriya.echo.common.clients.SearchFeedClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
@@ -26,6 +28,7 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
+import dev.brahmkshatriya.echo.common.settings.SettingList
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.helpers.findFile
@@ -33,8 +36,10 @@ import dev.brahmkshatriya.echo.extension.helpers.findFolderWithAudio
 import dev.brahmkshatriya.echo.extension.helpers.findMainAudioFolder
 import dev.brahmkshatriya.echo.extension.helpers.getAllAudioFiles
 import dev.brahmkshatriya.echo.extension.helpers.getFolder
+import dev.brahmkshatriya.echo.extension.helpers.listOf
 import dev.brahmkshatriya.echo.extension.helpers.toAlbum
 import dev.brahmkshatriya.echo.extension.helpers.toLyrics
+import dev.brahmkshatriya.echo.extension.helpers.toMediaItem
 import dev.brahmkshatriya.echo.extension.helpers.toShelf
 import dev.brahmkshatriya.echo.extension.helpers.toTrack
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +49,8 @@ import kotlinx.coroutines.withContext
 
 
 class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, RadioClient,
-    LyricsClient, ArtistClient, ShareClient, SearchFeedClient {
+    LyricsClient, ArtistClient, ShareClient, SearchFeedClient, LoginClient.UsernamePassword,
+    PlaylistClient {
     val asmrApi = AsmrApi()
 
     ////--------------------------------------------------------------------------------------------
@@ -59,6 +65,13 @@ class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Radio
             title = "Only show SFW works in search",
             key = "onlyShowSfw",
             defaultValue = false
+        ),
+        SettingList(
+            title = "Site Mirror",
+            key = "siteMirror",
+            entryTitles = listOf("asmr-100", "asmr-200", "asmr-300"),
+            entryValues = listOf("asmr-100", "asmr-200", "asmr-300"),
+            defaultEntryIndex = 1
         )
     )
 
@@ -71,7 +84,7 @@ class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Radio
     ////--------------------------------------------------------------------------------------------
     //// HomeFeedClient
     override fun getHomeFeed(tab: Tab?) = PagedData.Single {
-        val shelves: List<String> = listOf("Popular", "Recommended", "All")
+        val shelves: List<String> = listOf("Popular", "Recommended", "All", "Playlists", "Tags")
         withContext(Dispatchers.IO) {
             shelves.map { shelf ->
                 async {
@@ -90,6 +103,10 @@ class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Radio
                             title = "All",
                             function = asmrApi::getWorks
                         )
+
+                        "Playlists" -> getPlaylists()
+
+                        "Tags" -> getTagsShelf()
 
                         else -> null
                     }
@@ -117,6 +134,42 @@ class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Radio
                     val contInt = continuation?.toIntOrNull() ?: 0
                     val newResponse = function(contInt + 1)
                     val mediaItems = newResponse.works.map { it.toAlbum().toMediaItem() }
+                    val newContinuation =
+                        if (newResponse.pagination.currentPage * newResponse.pagination.pageSize < newResponse.pagination.totalCount) {
+                            (contInt + 1).toString()
+                        } else null
+                    Page(
+                        data = mediaItems,
+                        continuation = newContinuation
+                    )
+                }
+            } else null
+        )
+    }
+
+    private fun getTagsShelf(): Shelf {
+        val title = "Tags"
+        val tags = asmrApi.getTags()
+        return Shelf.Lists.Categories(
+            title = title,
+            list = tags.map { it.toShelf(asmrApi) },
+            type = Shelf.Lists.Type.Grid
+        )
+    }
+
+    private fun getPlaylists(): Shelf? {
+        val title = "Playlists"
+        val playlists = asmrApi.getPlaylists() ?: return null
+        return Shelf.Lists.Items(
+            title = title,
+            list = playlists.playlists.map { it.toMediaItem() },
+            type = Shelf.Lists.Type.Grid,
+            more = if (playlists.pagination.currentPage * playlists.pagination.pageSize < playlists.pagination.totalCount) {
+                PagedData.Continuous { continuation ->
+                    val contInt = continuation?.toIntOrNull() ?: 0
+                    val newResponse = asmrApi.getPlaylists(contInt + 1)
+                        ?: throw Exception("Failed to get playlists")
+                    val mediaItems = newResponse.playlists.map { it.toMediaItem() }
                     val newContinuation =
                         if (newResponse.pagination.currentPage * newResponse.pagination.pageSize < newResponse.pagination.totalCount) {
                             (contInt + 1).toString()
@@ -396,5 +449,46 @@ class AsmrOne : ExtensionClient, HomeFeedClient, AlbumClient, TrackClient, Radio
         }
 
     override suspend fun searchTabs(query: String): List<Tab> = emptyList()
+
+    ////--------------------------------------------------------------------------------------------
+    //// LoginClient.UsernamePassword
+    private var user: User? = null
+    override suspend fun getCurrentUser(): User? = user
+
+    override suspend fun onLogin(username: String, password: String): List<User> {
+        val res = asmrApi.login(username, password)
+        return User(
+            id = res.user.recommenderUuid,
+            name = res.user.name,
+            extras = mapOf("token" to res.token)
+        ).listOf()
+    }
+
+    override suspend fun onSetLoginUser(user: User?) {
+        this.user = user
+        asmrApi.updateUser(user?.id, user?.extras?.get("token"))
+    }
+
+    ////--------------------------------------------------------------------------------------------
+    //// PlaylistClient
+    override fun getShelves(playlist: Playlist): PagedData<Shelf> =
+        PagedData.Continuous { continuation ->
+            val contInt = continuation?.toIntOrNull() ?: 0
+            val newResponse = asmrApi.getPlaylistWorks(playlist.id, contInt + 1)
+            val mediaItems: List<EchoMediaItem.Lists.AlbumItem> =
+                newResponse.works.map { it.toAlbum().toMediaItem() }
+            val newContinuation =
+                if (newResponse.pagination.currentPage * newResponse.pagination.pageSize < newResponse.pagination.totalCount) {
+                    (contInt + 1).toString()
+                } else null
+            Page(
+                data = mediaItems.map { it.toShelf() },
+                continuation = newContinuation
+            )
+        }
+
+    override suspend fun loadPlaylist(playlist: Playlist): Playlist = playlist
+
+    override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.empty()
 
 }

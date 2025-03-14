@@ -199,8 +199,3 @@ fun MediaTreeItem.Folder.getAllAudioFiles(
     }
     return result
 }
-
-fun Work.createDescription(): String {
-    //return "Downloads: $dlCount, Price: $price, Reviews: $reviewCount, Rating: $rateAverage2dp\n" +
-    return "Tags: ${tags.joinToString { it.i18n.enUs.name ?: it.name }}"
-}
