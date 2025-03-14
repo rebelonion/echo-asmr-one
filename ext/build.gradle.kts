@@ -24,6 +24,7 @@ dependencies {
 
     api("com.github.Blatzar:NiceHttp:0.4.11")
     api("org.json:json:20231013")
+    implementation("com.github.therealbush:translator:1.1.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("com.github.brahmkshatriya:echo:$libVersion")
