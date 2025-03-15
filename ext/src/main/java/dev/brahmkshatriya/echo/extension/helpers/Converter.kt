@@ -90,7 +90,7 @@ fun Work.toAlbum(): Album {
 fun Work.toTrack(): Track {
     return Track(
         id = id.toString(),
-        title = title,
+        title = "Open the album below to access the track\n\n",
         album = toAlbum(),
         artists = vas.map { Artist(it.id, it.name) },
         cover = mainCoverUrl.buildImageHolder(),
@@ -100,7 +100,7 @@ fun Work.toTrack(): Track {
         streamables = Streamable.server(
                 id = "OPEN_ALBUM",
                 quality = 1,
-                title = title,
+                title = null,
             ).listOf()
 
     )

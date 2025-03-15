@@ -349,13 +349,12 @@ class AsmrOne : ExtensionClient,
 
     override fun getShelves(track: Track): PagedData<Shelf> = PagedData.empty()
 
-    class OpenAlbumException : Exception("Open the album below to access the track")
     override suspend fun loadStreamableMedia(
         streamable: Streamable,
         isDownload: Boolean
     ): Streamable.Media {
         if (streamable.id == "OPEN_ALBUM") {
-            throw OpenAlbumException()
+            throw Exception("Open the album below to access the track")
         }
         return streamable.id.toServerMedia()
     }
@@ -366,6 +365,9 @@ class AsmrOne : ExtensionClient,
     //// RadioClient
     override fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
         if (radio.id.startsWith("TRACK_")) {
+            if (radio.id == "TRACK_NO_ID") {
+                return@Single emptyList()
+            }
             val trackId = radio.id.removePrefix("TRACK_")
             val folderTitle = radio.title
             val hash = radio.extras.getOrElse("hash") {
@@ -434,6 +436,12 @@ class AsmrOne : ExtensionClient,
     }
 
     override suspend fun radio(track: Track, context: EchoMediaItem?): Radio {
+        if (track.title == "Open the album below to access the track\n\n") {
+            return Radio(
+                id = "TRACK_NO_ID",
+                title = "Open the album below to access the track",
+            )
+        }
         val folderTitle = track.extras.getOrElse("folderTitle") {
             throw Exception("Expected folderTitle in extras")
         }
