@@ -4,18 +4,18 @@ import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.extension.MediaTreeItem
 import dev.brahmkshatriya.echo.extension.Work
 import dev.brahmkshatriya.echo.extension.WorksResponse
-import me.bush.translator.Language
-import me.bush.translator.Translator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import me.bush.translator.Language
+import me.bush.translator.Translator
 
 
-suspend fun Work.translate(): Work {
+suspend fun Work.translate(language: Language): Work {
     val translator = Translator()
-    val translated = translator.translate(this.title, Language.ENGLISH, Language.AUTO)
+    val translated = translator.translate(this.title, language, Language.AUTO)
     this.title = translated.translatedText.moveFirstGroupToEnd()
     return this
 }
@@ -31,9 +31,9 @@ fun String.moveFirstGroupToEnd(): String {
     }
 }
 
-suspend fun Lyrics.Timed.translate(): Lyrics.Timed {
+suspend fun Lyrics.Timed.translate(language: Language): Lyrics.Timed {
     val stings = this.list.map { it.text }
-    val translationMap = translateList(stings) ?: return this
+    val translationMap = translateList(stings, language, hardFail = true) ?: return this
     val items = mutableListOf<Lyrics.Item>()
     this.list.forEach {
         val translatedText = translationMap[it.text]?.moveFirstGroupToEnd() ?: it.text
@@ -42,25 +42,29 @@ suspend fun Lyrics.Timed.translate(): Lyrics.Timed {
     return Lyrics.Timed(items)
 }
 
-suspend fun WorksResponse.translate(): WorksResponse {
+suspend fun WorksResponse.translate(language: Language): WorksResponse {
     val titles = this.works.map { it.title }
     val subtitles = this.works.map { it.name }
-    val translationMap = translateList(titles + subtitles) ?: return this
+    val translationMap = translateList(titles + subtitles, language) ?: return this
     this.works.forEach { it.title = translationMap[it.title]?.moveFirstGroupToEnd() ?: it.title }
     this.works.forEach { it.name = translationMap[it.name]?.moveFirstGroupToEnd() ?: it.name }
     return this
 }
 
-suspend fun MediaTreeItem.Folder.translate(): MediaTreeItem.Folder {
+suspend fun MediaTreeItem.Folder.translate(language: Language): MediaTreeItem.Folder {
     val titles = this.getAllTitles()
-    val translationMap = translateList(titles) ?: return this
+    val translationMap = translateList(titles, language) ?: return this
     this.applyTranslations(translationMap)
     return this
 }
 
 private val translationCache = TimeBasedLRUCache<Map<String, String>>(1000)
 
-suspend fun translateList(list: List<String>): Map<String, String>? {
+private suspend fun translateList(
+    list: List<String>,
+    language: Language,
+    hardFail: Boolean = false
+): Map<String, String>? {
     if (list.isEmpty()) {
         return emptyMap()
     }
@@ -73,7 +77,13 @@ suspend fun translateList(list: List<String>): Map<String, String>? {
     }
 
     val translator = Translator()
-    val chunks = splitIntoChunks(list)
+    val chunks = splitIntoChunks(list.map { it.replace("\n", " ") })
+    if (chunks.flatten().size != list.size) {
+        println("asmr-logging: Chunking failed")
+        if (hardFail)
+            throw Exception("Chunking failed")
+        else return null
+    }
 
     return withContext(Dispatchers.IO) {
         coroutineScope {
@@ -82,7 +92,8 @@ suspend fun translateList(list: List<String>): Map<String, String>? {
                     val titleString = chunk.joinToString("\n")
 
                     val translatedCatch = translator.translateCatching(
-                        titleString, Language.ENGLISH, Language.AUTO)
+                        titleString, language, Language.AUTO
+                    )
 
                     if (translatedCatch.isFailure) {
                         val exception = translatedCatch.exceptionOrNull()
@@ -96,14 +107,20 @@ suspend fun translateList(list: List<String>): Map<String, String>? {
             }.awaitAll()
 
             if (translatedChunks.any { it == null }) {
-                return@coroutineScope null
+                if (hardFail)
+                    throw Exception("Chunk failed to translate")
+                else return@coroutineScope null
             }
 
             val allTranslatedItems = translatedChunks.filterNotNull().flatten()
 
             if (allTranslatedItems.size != list.size) {
                 println("asmr-logging: Translation count mismatch. Original: ${list.size}, Translated: ${allTranslatedItems.size}")
-                return@coroutineScope null
+                println("asmr-logging: Original: $list")
+                println("asmr-logging: Translated: $allTranslatedItems")
+                if (hardFail)
+                    throw Exception("Translation count mismatch")
+                else return@coroutineScope null
             }
             val result = list.zip(allTranslatedItems).toMap()
             translationCache.put(cacheKey, result)
@@ -179,6 +196,7 @@ fun MediaTreeItem.Folder.applyTranslations(translationMap: Map<String, String>) 
                 item.title = translationMap[item.title] ?: item.title
                 item.applyTranslations(translationMap)
             }
+
             else -> {}
         }
     }

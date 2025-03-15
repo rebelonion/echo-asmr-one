@@ -1,7 +1,6 @@
 package dev.brahmkshatriya.echo.extension.helpers
 
 import dev.brahmkshatriya.echo.extension.MediaTreeItem
-import dev.brahmkshatriya.echo.extension.Work
 
 fun MediaTreeItem.Folder.getAllTitles(): List<String> {
     val result = mutableListOf<String>()
@@ -12,6 +11,7 @@ fun MediaTreeItem.Folder.getAllTitles(): List<String> {
                 result.add(item.title)
                 result.addAll(item.getAllTitles())
             }
+
             else -> {}
         }
     }
@@ -46,12 +46,22 @@ fun MediaTreeItem.Folder.findMainAudioFolder(): String? {
     // If none, return the path to the folder with the most audio files
     val mp3FolderPaths = findAllFoldersWithTitle("mp3")
     if (mp3FolderPaths.isNotEmpty()) {
-        return mp3FolderPaths.maxByOrNull { getFolder(it).getAllAudioFiles(false).size }
+        val max = mp3FolderPaths
+            .map { path -> path to getFolder(path).getAllAudioFiles(false) }
+            .filter { (_, files) -> files.isNotEmpty() }
+            .maxByOrNull { (_, files) -> files.size }
+            ?.first
+        if (max != null) {
+            return max
+        }
     }
-    return findFolderWithMostAudioFiles()
+    return findFolderWithMostAudioFiles().first
 }
 
-fun MediaTreeItem.Folder.findAllFoldersWithTitle(title: String, currentPath: String = ""): List<String> {
+fun MediaTreeItem.Folder.findAllFoldersWithTitle(
+    title: String,
+    currentPath: String = ""
+): List<String> {
     val result = mutableListOf<String>()
     for (item in children) {
         val itemPath = if (currentPath.isEmpty()) item.title else "$currentPath/${item.title}"
@@ -65,34 +75,28 @@ fun MediaTreeItem.Folder.findAllFoldersWithTitle(title: String, currentPath: Str
     return result
 }
 
-fun MediaTreeItem.Folder.findFolderWithMostAudioFiles(currentPath: String = ""): String? {
+fun MediaTreeItem.Folder.findFolderWithMostAudioFiles(currentPath: String = ""): Pair<String?, Int> {
     var maxCount = 0
     var maxFolderPath: String? = null
+    val currentFolderCount = getAllAudioFiles(false).size
+    if (currentFolderCount > 0) {
+        maxCount = currentFolderCount
+        maxFolderPath = currentPath
+    }
 
     for (item in children) {
         if (item is MediaTreeItem.Folder) {
             val itemPath = if (currentPath.isEmpty()) item.title else "$currentPath/${item.title}"
-
-            val count = item.getAllAudioFiles(false).size
-            if (count > maxCount) {
-                maxCount = count
-                maxFolderPath = itemPath
-            }
-
-            // Recursively check subfolders
-            val subfolderPath = item.findFolderWithMostAudioFiles(itemPath)
-            if (subfolderPath != null) {
-                val subfolderCount = getFolder(subfolderPath).getAllAudioFiles(false).size
-                if (subfolderCount > maxCount) {
-                    maxCount = subfolderCount
-                    maxFolderPath = subfolderPath
-                }
+            val (subFolderPath, subFolderCount) = item.findFolderWithMostAudioFiles(itemPath)
+            if (subFolderPath != null && subFolderCount > maxCount) {
+                maxCount = subFolderCount
+                maxFolderPath = subFolderPath
             }
         }
     }
-
-    return maxFolderPath
+    return Pair(maxFolderPath, maxCount)
 }
+
 
 fun MediaTreeItem.Folder.getFolder(path: String): MediaTreeItem.Folder {
     val pathParts = path.split("/")

@@ -1,7 +1,7 @@
 package dev.brahmkshatriya.echo.extension.helpers
 
-import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.helpers.Page
+import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
@@ -33,6 +33,7 @@ fun MediaTreeItem.Audio.toTrack(album: Album, folderTitle: String): Track {
         duration = (duration * 1000).toLong(),
         isExplicit = album.isExplicit,
         releaseDate = album.releaseDate,
+        isLiked = (album.subtitle?.findAll('★')?.size ?: 0) > 3,
         streamables = listOf(
             Streamable.server(
                 id = mediaStreamUrl,
@@ -66,16 +67,37 @@ fun MediaTreeItem.toShelf(album: Album): Shelf? {
 }
 
 fun Work.toAlbum(): Album {
+    var sustitleString = ""
+    userRating?.let {
+        for (i in 1..userRating) sustitleString += "★"
+        for (i in userRating until 5) sustitleString += "☆"
+    }
+
     return Album(
         id = id.toString(),
         title = title,
+        subtitle = sustitleString.ifEmpty { name },
         tracks = 0,
         cover = mainCoverUrl.buildImageHolder(),
         artists = vas.map { Artist(it.id, it.name) },
         releaseDate = release.toDate(),
         description = this.createDescription(),
         isExplicit = nsfw,
-        subtitle = name
+    )
+}
+
+//THIS IS A FAKE TRACK DON'T USE IT AS A REAL TRACK
+fun Work.toTrack(): Track {
+    return Track(
+        id = id.toString(),
+        title = title,
+        album = toAlbum(),
+        artists = vas.map { Artist(it.id, it.name) },
+        cover = mainCoverUrl.buildImageHolder(),
+        duration = 0,
+        isExplicit = nsfw,
+        releaseDate = release.toDate(),
+        streamables = emptyList()
     )
 }
 
@@ -92,7 +114,8 @@ fun Tag.toShelf(asmrApi: AsmrApi): Shelf.Category {
         title = i18n.enUs.name ?: name,
         items = PagedData.Continuous { continuation ->
             val contInt = continuation?.toIntOrNull() ?: 0
-            val newResponse = asmrApi.searchWorks(contInt + 1, keyword = "\$tag:${i18n.enUs.name ?: name}\$")
+            val newResponse =
+                asmrApi.searchWorks(contInt + 1, keyword = "\$tag:${i18n.enUs.name ?: name}\$")
             val mediaItems: List<EchoMediaItem.Lists.AlbumItem> =
                 newResponse.works.map { it.toAlbum().toMediaItem() }
             val newContinuation =
@@ -108,7 +131,6 @@ fun Tag.toShelf(asmrApi: AsmrApi): Shelf.Category {
 }
 
 
-
 fun Work.createDescription(): String {
     return "Tags: ${tags.joinToString { it.i18n.enUs.name ?: it.name }}\n" +
             "Full Title: ${title}\n" +
@@ -116,20 +138,25 @@ fun Work.createDescription(): String {
 }
 
 fun AsmrPlaylist.toMediaItem(): EchoMediaItem.Lists.PlaylistItem {
-    val parsedName = when(name) {
+    return EchoMediaItem.Lists.PlaylistItem(
+        this.toPlaylist()
+    )
+}
+
+fun AsmrPlaylist.toPlaylist(): Playlist {
+    val parsedName = when (name) {
         "__SYS_PLAYLIST_MARKED" -> "Marked"
         "__SYS_PLAYLIST_LIKED" -> "Liked"
         else -> name
     }
-    return EchoMediaItem.Lists.PlaylistItem(
-        Playlist(
-            id = id,
-            title = parsedName,
-            cover = mainCoverUrl.buildImageHolder(),
-            description = description,
-            creationDate = createdAt.toDate(),
-            isPrivate = privacy != 0,
-            isEditable = false
-        )
+    return Playlist(
+        id = id,
+        title = parsedName,
+        cover = mainCoverUrl.buildImageHolder(),
+        description = description,
+        creationDate = createdAt.toDate(),
+        isPrivate = privacy == 0,
+        tracks = worksCount,
+        isEditable = true
     )
 }

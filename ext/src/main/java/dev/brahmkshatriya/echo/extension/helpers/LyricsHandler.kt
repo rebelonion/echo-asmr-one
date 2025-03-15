@@ -1,8 +1,9 @@
 package dev.brahmkshatriya.echo.extension.helpers
 
 import dev.brahmkshatriya.echo.common.models.Lyrics
+import me.bush.translator.Language
 
-suspend fun String.toLyrics(): Lyrics.Timed {
+suspend fun String.toLyrics(language: Language): Lyrics.Timed {
     val lines = this.lines()
     val contentLines = if (lines.isNotEmpty() && lines[0].trim() == "WEBVTT") {
         lines.drop(1)
@@ -51,7 +52,7 @@ suspend fun String.toLyrics(): Lyrics.Timed {
             )
         )
     }
-    return Lyrics.Timed(list = items).translate()
+    return Lyrics.Timed(list = items).translate(language)
 }
 
 /**

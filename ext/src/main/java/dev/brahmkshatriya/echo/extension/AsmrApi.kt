@@ -4,14 +4,24 @@ import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.helpers.TimeBasedLRUCache
 import dev.brahmkshatriya.echo.extension.helpers.deepCopy
 import dev.brahmkshatriya.echo.extension.helpers.filterToSubtitled
+import dev.brahmkshatriya.echo.extension.helpers.getTranslationLanguage
 import dev.brahmkshatriya.echo.extension.helpers.removeEmptyFolders
 import dev.brahmkshatriya.echo.extension.helpers.translate
 import io.ktor.http.URLBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.mapSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,6 +42,7 @@ class AsmrApi {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        encodeDefaults = true
     }
     private var settings: Settings? = null
 
@@ -102,7 +113,7 @@ class AsmrApi {
             "root",
             response
         ).removeEmptyFolders()
-            .translate()
+            .translate(settings.getTranslationLanguage())
 
         workTreeCache.put(workId, folders.deepCopy())
 
@@ -112,7 +123,7 @@ class AsmrApi {
     suspend fun getWork(workId: String): Work {
         val url = "$baseUrl/workInfo/$workId"
         return sendRequest<Work>(url, RequestType.GET)
-            .translate()
+            .translate(settings.getTranslationLanguage())
     }
 
     suspend fun getPopularWorks(
@@ -134,7 +145,7 @@ class AsmrApi {
         )
         return sendRequest<WorksResponse>(url, RequestType.POST, body)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
     }
 
     suspend fun getRecommendedWorks(
@@ -158,7 +169,7 @@ class AsmrApi {
         )
         return sendRequest<WorksResponse>(url, RequestType.POST, body)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
     }
 
     suspend fun getWorks(
@@ -179,7 +190,7 @@ class AsmrApi {
         )
         return sendRequest<WorksResponse>(url, RequestType.GET)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
     }
 
     suspend fun searchWorks(
@@ -209,7 +220,7 @@ class AsmrApi {
         //println("asmr-logging: $url")
         return sendRequest<WorksResponse>(url, RequestType.GET)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
 
     }
 
@@ -230,16 +241,37 @@ class AsmrApi {
         )
         return sendRequest<WorksResponse>(url, RequestType.POST, body)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
+    }
+
+    suspend fun getFavorites(
+        page: Int = 1,
+        order: SortOrder = SortOrder.RELEASE,
+        sort: SortType = SortType.DESC
+    ): WorksResponse {
+        if (token == null) {
+            return WorksResponse(emptyList(), Pagination(0, 0, 0))
+        }
+        val url = parametersBuilder(
+            "$baseUrl/review",
+            mapOf(
+                "order" to order.onlyShowSfw(),
+                "sort" to sort.onlyShowSfw(),
+                "page" to page
+            )
+        )
+        return sendRequest<WorksResponse>(url, RequestType.GET)
+            .filterToSubtitled(onlySubtitled())
+            .translate(settings.getTranslationLanguage())
     }
 
     fun getPlaylists(
         page: Int = 1,
         pageSize: Int = 96,
         filterBy: String = "all"
-    ): PlaylistsResponse? {
+    ): PlaylistsResponse {
         if (token == null) {
-            return null
+            return PlaylistsResponse(emptyList(), Pagination(0, 0, 0))
         }
         val url = parametersBuilder(
             "https://api.asmr.one/api/playlist/get-playlists",
@@ -252,10 +284,12 @@ class AsmrApi {
         return sendRequest(url, RequestType.GET)
     }
 
+    ////--------------------------------------------------------------------------------------------
+
     suspend fun getPlaylistWorks(
         playlistId: String,
         page: Int = 1,
-        pageSize: Int = 12
+        pageSize: Int = 96
     ): WorksResponse {
         val url = parametersBuilder(
             "https://api.asmr.one/api/playlist/get-playlist-works",
@@ -267,8 +301,82 @@ class AsmrApi {
         )
         return sendRequest<WorksResponse>(url, RequestType.GET)
             .filterToSubtitled(onlySubtitled())
-            .translate()
+            .translate(settings.getTranslationLanguage())
     }
+
+    fun addWorksToPlaylist(playlistId: String, workId: List<String>) {
+        val url = "https://api.asmr.one/api/playlist/add-works-to-playlist"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "id" to playlistId,
+                "works" to workId
+            )
+        )
+        return sendRequest(url, RequestType.POST, body)
+    }
+
+    fun removeWorksFromPlaylist(playlistId: String, workId: List<String>) {
+        val url = "https://api.asmr.one/api/playlist/remove-works-from-playlist"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "id" to playlistId,
+                "works" to workId
+            )
+        )
+        return sendRequest(url, RequestType.POST, body)
+    }
+
+    fun createPlaylist(
+        name: String,
+        description: String = "",
+        privacy: Int = 0,
+        locale: String = "en",
+        works: List<String> = emptyList()
+    ): AsmrPlaylist {
+        val url = "https://api.asmr.one/api/playlist/create-playlist"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "name" to name,
+                "privacy" to privacy,
+                "locale" to locale,
+                "description" to description,
+                "works" to works
+            )
+        )
+        return sendRequest(url, RequestType.POST, body)
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        val url = "https://api.asmr.one/api/playlist/delete-playlist"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "id" to playlistId
+            )
+        )
+        return sendRequest(url, RequestType.POST, body)
+    }
+
+    fun editPlaylist(
+        playlistId: String,
+        name: String,
+        description: String = "",
+        privacy: Int = 0
+    ) {
+        val url = "https://api.asmr.one/api/playlist/edit-playlist-metadata"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "id" to playlistId,
+                "data" to mapOf(
+                    "name" to name,
+                    "privacy" to privacy,
+                    "description" to description
+                )
+            )
+        )
+        return sendRequest(url, RequestType.POST, body)
+    }
+
+    ////--------------------------------------------------------------------------------------------
 
     private var tagsCache: List<Tag>? = null
     fun getTags(): List<Tag> {
@@ -276,7 +384,8 @@ class AsmrApi {
         if (tagsCache != null) {
             return tagsCache!!
         }
-        val response = sendRequest<List<Tag>>(url, RequestType.GET).sortedBy { it.i18n.enUs.name ?: it.name }
+        val response =
+            sendRequest<List<Tag>>(url, RequestType.GET).sortedBy { it.i18n.enUs.name ?: it.name }
         tagsCache = response
         return response
     }
@@ -288,6 +397,27 @@ class AsmrApi {
             throw Exception("Failed to send request: ${response.code}: ${response.body.string()}")
         }
         return response.body.string()
+    }
+
+    fun rateWork(workId: String, rating: Int?) {
+        val url = "https://api.asmr.one/api/review"
+        val body = jsonBodyBuilder(
+            mapOf(
+                "work_id" to workId,
+                "rating" to rating
+            )
+        )
+        return sendRequest(url, RequestType.PUT, body)
+    }
+
+    fun deleteRating(workId: String) {
+        val url = parametersBuilder(
+            "https://api.asmr.one/api/review",
+            mapOf(
+                "work_id" to workId
+            )
+        )
+        return sendRequest(url, RequestType.DELETE)
     }
 
     ////--------------------------------------------------------------------------------------------
@@ -336,17 +466,46 @@ class AsmrApi {
         }.build()
     }
 
-    private fun jsonBodyBuilder(body: Map<String, Any>): RequestBody {
-        val jsonObject = buildJsonObject {
-            body.forEach { (key, value) ->
+    object AnyValueMapSerializer : KSerializer<Map<String, Any?>> {
+        @OptIn(ExperimentalSerializationApi::class)
+        override val descriptor =
+            mapSerialDescriptor(String.serializer().descriptor, JsonElement.serializer().descriptor)
+
+        override fun serialize(encoder: Encoder, value: Map<String, Any?>) {
+            val jsonObject = JsonObject(value.mapValues { (_, value) ->
                 when (value) {
-                    is String -> put(key, JsonPrimitive(value))
-                    is Number -> put(key, JsonPrimitive(value))
+                    null -> JsonNull
+                    is String -> JsonPrimitive(value)
+                    is Number -> JsonPrimitive(value)
+                    is Boolean -> JsonPrimitive(value)
+                    is List<*> -> {
+                        buildJsonArray {
+                            value.forEach { item ->
+                                when (item) {
+                                    null -> add(JsonNull)
+                                    is String -> add(JsonPrimitive(item))
+                                    is Number -> add(JsonPrimitive(item))
+                                    is Boolean -> add(JsonPrimitive(item))
+                                    else -> throw IllegalArgumentException("Unsupported list item type: ${item::class}")
+                                }
+                            }
+                        }
+                    }
+
                     else -> throw IllegalArgumentException("Unsupported type: ${value::class}")
                 }
-            }
+            })
+            encoder.encodeSerializableValue(JsonObject.serializer(), jsonObject)
         }
-        return jsonObject.toString().toRequestBody("application/json".toMediaType())
+
+        override fun deserialize(decoder: Decoder): Map<String, Any?> {
+            throw NotImplementedError("Deserialize not implemented")
+        }
+    }
+
+    private fun jsonBodyBuilder(body: Map<String, Any?>): RequestBody {
+        return json.encodeToString(AnyValueMapSerializer, body)
+            .toRequestBody("application/json".toMediaType())
     }
 
     private fun parametersBuilder(url: String, parameters: Map<String, Any>): String {
@@ -371,6 +530,7 @@ class AsmrApi {
         val request = requestBuilder(url, type, body, headers)
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
+            println("asmr-logging: Failed to send request: ${response.code}: ${response.body.string()}")
             throw Exception("Failed to send request: ${response.code}: ${response.body.string()}")
         }
         return json.decodeFromString<T>(response.body.string())

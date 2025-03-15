@@ -88,7 +88,7 @@ sealed class MediaTreeItem {
         override var title: String,
         override val untranslatedTitle: String = title,
         var children: List<MediaTreeItem>
-    ): MediaTreeItem()
+    ) : MediaTreeItem()
 
     @Serializable
     @SerialName("audio")
@@ -104,7 +104,7 @@ sealed class MediaTreeItem {
         val streamLowQualityUrl: String? = "",
         val duration: Double,
         val size: Long
-    ): MediaTreeItem()
+    ) : MediaTreeItem()
 
     @Serializable
     @SerialName("text")
@@ -119,7 +119,7 @@ sealed class MediaTreeItem {
         val mediaDownloadUrl: String,
         val duration: Double? = null,
         val size: Long
-    ): MediaTreeItem()
+    ) : MediaTreeItem()
 
     @Serializable
     @SerialName("image")
@@ -133,7 +133,7 @@ sealed class MediaTreeItem {
         val mediaStreamUrl: String,
         val mediaDownloadUrl: String,
         val size: Long
-    ): MediaTreeItem()
+    ) : MediaTreeItem()
 
     @Serializable
     @SerialName("other")
@@ -147,7 +147,7 @@ sealed class MediaTreeItem {
         val mediaStreamUrl: String,
         val mediaDownloadUrl: String,
         val size: Long
-    ): MediaTreeItem()
+    ) : MediaTreeItem()
 }
 
 @Serializable
@@ -251,7 +251,8 @@ data class Work(
     val mainCoverUrl: String
 )
 
-object LanguageEditionsDeserializer : JsonTransformingSerializer<List<LanguageEdition>>(ListSerializer(LanguageEdition.serializer())) {
+object LanguageEditionsDeserializer :
+    JsonTransformingSerializer<List<LanguageEdition>>(ListSerializer(LanguageEdition.serializer())) {
     override fun transformDeserialize(element: JsonElement): JsonElement {
         if (element is JsonArray) {
             return element
@@ -402,7 +403,7 @@ data class TranslationInfo(
 
 //@Serializable
 //data class PlaylistStatus(
-    // TODO: ??
+// TODO: ??
 // uuid to boolean
 //ex: f87ed037-4e61-47aa-8c9c-ae9ddbc50341: false
 //)

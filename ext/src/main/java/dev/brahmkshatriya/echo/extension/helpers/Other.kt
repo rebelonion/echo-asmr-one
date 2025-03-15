@@ -3,6 +3,8 @@ package dev.brahmkshatriya.echo.extension.helpers
 import dev.brahmkshatriya.echo.common.models.Date
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
+import dev.brahmkshatriya.echo.common.settings.Settings
+import me.bush.translator.Language
 
 fun String.buildImageHolder(): ImageHolder {
     return this.toImageHolder(
@@ -19,6 +21,15 @@ fun String.toDate(): Date {
     )
 }
 
+fun String.findAll(char: Char) =
+    this.mapIndexed { index, c -> if (c == char) index else null }.filterNotNull()
+
 fun <T> T.listOf(): List<T> {
     return listOf(this)
+}
+
+
+fun Settings?.getTranslationLanguage(): Language {
+    val language = this?.getString("translationLanguage") ?: return Language.ENGLISH
+    return Language.entries.find { it.code == language } ?: Language.ENGLISH
 }
