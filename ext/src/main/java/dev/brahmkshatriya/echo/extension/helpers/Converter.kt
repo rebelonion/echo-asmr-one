@@ -97,7 +97,12 @@ fun Work.toTrack(): Track {
         duration = 0,
         isExplicit = nsfw,
         releaseDate = release.toDate(),
-        streamables = emptyList()
+        streamables = Streamable.server(
+                id = "OPEN_ALBUM",
+                quality = 1,
+                title = title,
+            ).listOf()
+
     )
 }
 

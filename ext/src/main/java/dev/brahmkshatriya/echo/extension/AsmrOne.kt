@@ -15,6 +15,7 @@ import dev.brahmkshatriya.echo.common.clients.SearchFeedClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
 import dev.brahmkshatriya.echo.common.clients.TrackLikeClient
+import dev.brahmkshatriya.echo.common.helpers.ClientException
 import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
@@ -348,10 +349,14 @@ class AsmrOne : ExtensionClient,
 
     override fun getShelves(track: Track): PagedData<Shelf> = PagedData.empty()
 
+    class OpenAlbumException : Exception("Open the album below to access the track")
     override suspend fun loadStreamableMedia(
         streamable: Streamable,
         isDownload: Boolean
     ): Streamable.Media {
+        if (streamable.id == "OPEN_ALBUM") {
+            throw OpenAlbumException()
+        }
         return streamable.id.toServerMedia()
     }
 
@@ -689,14 +694,13 @@ class AsmrOne : ExtensionClient,
         asmrApi.editPlaylist(playlist.id, newTitle, description ?: "")
     }
 
+
     override suspend fun moveTrackInPlaylist(
         playlist: Playlist,
         tracks: List<Track>,
         fromIndex: Int,
         toIndex: Int
-    ) {
-        throw Exception("Moving tracks in playlist is not supported")
-    }
+    ) = throw ClientException.NotSupported("Move track in playlist not supported")
 
     ////--------------------------------------------------------------------------------------------
     //// PlaylistEditPrivacyClient
