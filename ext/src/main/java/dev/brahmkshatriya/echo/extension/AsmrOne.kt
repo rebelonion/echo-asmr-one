@@ -163,7 +163,6 @@ class AsmrOne : ExtensionClient,
 
     ////--------------------------------------------------------------------------------------------
     //// LibraryFeedClient
-
     override fun getLibraryFeed(tab: Tab?) = PagedData.Single {
         val shelves: List<String> = listOf("Playlists", "Favorites")
         withContext(Dispatchers.IO) {
@@ -222,9 +221,9 @@ class AsmrOne : ExtensionClient,
         )
     }
 
-    private fun getPlaylists(): Shelf? {
+    private fun getPlaylists(): Shelf {
         val title = "Playlists"
-        val playlists = asmrApi.getPlaylists() ?: return null
+        val playlists = asmrApi.getPlaylists()
         return Shelf.Lists.Items(
             title = title,
             list = playlists.playlists.map { it.toMediaItem() },
@@ -512,7 +511,12 @@ class AsmrOne : ExtensionClient,
 
     private suspend fun getLyrics(workId: String, untranslatedTitle: String): Lyrics.Timed? {
         val tree = asmrApi.getWorkMediaTree(workId)
-        val file = tree.findFile("$untranslatedTitle.vtt") as? MediaTreeItem.Text ?: return null
+        val file = tree.findFile("$untranslatedTitle.vtt") as? MediaTreeItem.Text
+            ?: tree.findFile(
+                "${
+                    untranslatedTitle.removeSuffix(".mp3").removeSuffix(".wav")
+                }.lrc"
+            ) as? MediaTreeItem.Text ?: return null
         return asmrApi.getSubTitleFile(file.mediaDownloadUrl)
             .toLyrics(settings.getTranslationLanguage())
     }

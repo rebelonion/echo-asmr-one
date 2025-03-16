@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "echo-lastfm"
+rootProject.name = "echo-asmr-one"
 include(":app")
 include(":ext")
  

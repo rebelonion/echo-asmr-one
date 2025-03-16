@@ -53,18 +53,34 @@ android {
             put("class_path", "dev.brahmkshatriya.echo.extension.${extClass}")
             put("version", verName)
             put("version_code", verCode.toString())
-            put("icon_url", extIconUrl ?: "")
+            extIconUrl?.let { put("icon_url", it) }
             put("app_name", "Echo : $extName Extension")
             put("name", extName)
-            put("description", extDescription ?: "")
+            extDescription?.let { put("description", it) }
             put("author", extAuthor)
-            put("author_url", extAuthorUrl ?: "")
-            put("repo_url", extRepoUrl ?: "")
-            put("update_url", extUpdateUrl ?: "")
+            extAuthorUrl?.let { put("author_url", it) }
+            extRepoUrl?.let { put("repo_url", it) }
+            extUpdateUrl?.let { put("update_url", it) }
         }
+        resValue("string", "id", extId)
+        resValue("string", "class_path", "$namespace.${extClass}")
+
+        versionName = verName
+        resValue("string", "version", verName)
+        versionCode = verCode
+        resValue("string", "version_code", verCode.toString())
+
+        extIconUrl?.let { resValue("string", "icon_url", it) }
+        resValue("string", "app_name", "Echo : $extName Extension")
+        resValue("string", "name", extName)
+        description?.let { resValue("string", "description", it) }
+
+        resValue("string", "author", extAuthor)
+        extAuthorUrl?.let { resValue("string", "author_url", it) }
+
+        extRepoUrl?.let { resValue("string", "repo_url", it) }
+        extUpdateUrl?.let { resValue("string", "update_url", it) }
     }
-
-
 
     buildTypes {
         release {

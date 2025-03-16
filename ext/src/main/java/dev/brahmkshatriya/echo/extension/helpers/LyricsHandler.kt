@@ -4,6 +4,77 @@ import dev.brahmkshatriya.echo.common.models.Lyrics
 import me.bush.translator.Language
 
 suspend fun String.toLyrics(language: Language): Lyrics.Timed {
+    val isLrcFormat = this.trimStart().startsWith("[") &&
+            this.contains(Regex("\\[\\d{2}:\\d{2}\\.\\d{2}]"))
+
+    return if (isLrcFormat) {
+        parseLrcFormat(language)
+    } else {
+        parseWebVttFormat(language)
+    }
+}
+
+/**
+ * Parse LRC format lyrics
+ * Example: [00:04.46]欸 幹嘛?
+ */
+private suspend fun String.parseLrcFormat(language: Language): Lyrics.Timed {
+    val lines = this.lines()
+    val items = mutableListOf<Lyrics.Item>()
+
+    // LRC files can have multiple timestamps on a single line
+    for (line in lines) {
+        val trimmedLine = line.trim()
+        if (trimmedLine.isEmpty()) continue
+
+        val timestampRegex = Regex("\\[(\\d{2}):(\\d{2})\\.(\\d{2})]")
+        val matches = timestampRegex.findAll(trimmedLine)
+
+        if (matches.count() > 0) {
+            val textStartIndex = timestampRegex.findAll(trimmedLine)
+                .last().range.last + 1
+
+            val text = if (textStartIndex < trimmedLine.length) {
+                trimmedLine.substring(textStartIndex)
+            } else {
+                ""  // Empty line or timestamp with no text
+            }
+
+            for (match in matches) {
+                val minutes = match.groupValues[1].toLong()
+                val seconds = match.groupValues[2].toLong()
+                val centiseconds = match.groupValues[3].toLong()
+                val startTime = (minutes * 60 + seconds) * 1000 + centiseconds * 10
+
+                // For LRC files, we often need to calculate the end time based on the next timestamp
+                val endTime = startTime + 5000
+
+                // Only add non-empty text lines as items
+                if (text.isNotEmpty()) {
+                    items.add(
+                        Lyrics.Item(
+                            text = text,
+                            startTime = startTime,
+                            endTime = endTime  // Will be adjusted later
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    // each item ends when the next one starts
+    for (i in 0 until items.size - 1) {
+        items[i] = items[i].copy(endTime = items[i + 1].startTime)
+    }
+
+    return Lyrics.Timed(list = items).translate(language)
+}
+
+/**
+ * Parse WebVTT format lyrics
+ */
+private suspend fun String.parseWebVttFormat(language: Language): Lyrics.Timed {
     val lines = this.lines()
     val contentLines = if (lines.isNotEmpty() && lines[0].trim() == "WEBVTT") {
         lines.drop(1)
@@ -19,7 +90,6 @@ suspend fun String.toLyrics(language: Language): Lyrics.Timed {
         val trimmedLine = line.trim()
 
         if (trimmedLine.isEmpty()) {
-            // Empty line, process the current entry if we have timestamp and text
             if (currentTimestamp != null && currentText.isNotEmpty()) {
                 items.add(
                     Lyrics.Item(
