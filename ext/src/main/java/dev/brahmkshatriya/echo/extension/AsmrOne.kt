@@ -609,7 +609,7 @@ class AsmrOne : ExtensionClient,
     override suspend fun searchTabs(query: String): List<Tab> = emptyList()
 
     ////--------------------------------------------------------------------------------------------
-    //// LoginClient.UsernamePassword
+    //// LoginClient.CustomInput
     private var user: User? = null
     override val forms: List<LoginClient.Form>
         get() = LoginClient.Form(
