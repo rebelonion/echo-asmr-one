@@ -59,7 +59,7 @@ import me.bush.translator.Language
 
 class AsmrOne : ExtensionClient,
     HomeFeedClient, LibraryFeedClient, AlbumClient, TrackClient, RadioClient,
-    LyricsClient, ArtistClient, ShareClient, SearchFeedClient, LoginClient.UsernamePassword,
+    LyricsClient, ArtistClient, ShareClient, SearchFeedClient, LoginClient.CustomInput,
     PlaylistClient, PlaylistEditClient, PlaylistEditPrivacyClient, TrackLikeClient {
     val asmrApi = AsmrApi()
 
@@ -611,9 +611,31 @@ class AsmrOne : ExtensionClient,
     ////--------------------------------------------------------------------------------------------
     //// LoginClient.UsernamePassword
     private var user: User? = null
-    override suspend fun getCurrentUser(): User? = user
+    override val forms: List<LoginClient.Form>
+        get() = LoginClient.Form(
+            key = "login",
+            label = "Login",
+            icon = LoginClient.InputField.Type.Username,
+            inputFields = kotlin.collections.listOf(
+                LoginClient.InputField(
+                    type = LoginClient.InputField.Type.Username,
+                    key = "username",
+                    label = "Username",
+                    isRequired = true,
+                ),
+                LoginClient.InputField(
+                    type = LoginClient.InputField.Type.Password,
+                    key = "password",
+                    label = "Password",
+                    isRequired = true,
+                )
+            )
+        ).listOf()
 
-    override suspend fun onLogin(username: String, password: String): List<User> {
+    override suspend fun getCurrentUser(): User? = user
+    override suspend fun onLogin(key: String, data: Map<String, String?>): List<User> {
+        val username = data["username"] ?: return emptyList()
+        val password = data["password"] ?: return emptyList()
         val res = asmrApi.login(username, password)
         return User(
             id = res.user.recommenderUuid,
@@ -655,10 +677,6 @@ class AsmrOne : ExtensionClient,
 
     ////--------------------------------------------------------------------------------------------
     //// PlaylistEditClient
-    override suspend fun listEditablePlaylists(): List<Playlist> {
-        return asmrApi.getPlaylists().playlists.map { it.toPlaylist() }
-    }
-
     override suspend fun addTracksToPlaylist(
         playlist: Playlist,
         tracks: List<Track>,
@@ -730,6 +748,15 @@ class AsmrOne : ExtensionClient,
             asmrApi.deleteRating(
                 track.album?.id ?: track.extras["id"] ?: throw Exception("Expected album id")
             )
+        }
+    }
+
+    override suspend fun listEditablePlaylists(track: Track?): List<Pair<Playlist, Boolean>> {
+        val playlists = asmrApi.getPlaylists().playlists.map { it.toPlaylist() }
+        return playlists.map { playlist ->
+            val works = asmrApi.getPlaylistWorks(playlist.id, 1).works
+            val isInPlaylist = works.any { it.id.toString() == track?.id }
+            Pair(playlist, isInPlaylist)
         }
     }
 }
