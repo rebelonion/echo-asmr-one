@@ -1,4 +1,4 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
 import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.helpers.PagedData
@@ -10,12 +10,12 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
-import dev.brahmkshatriya.echo.extension.AsmrApi
-import dev.brahmkshatriya.echo.extension.AsmrPlaylist
-import dev.brahmkshatriya.echo.extension.MediaTreeItem
-import dev.brahmkshatriya.echo.extension.Tag
-import dev.brahmkshatriya.echo.extension.Work
-import dev.brahmkshatriya.echo.extension.WorksResponse
+import dev.brahmkshatriya.echo.extension.asmrone.AsmrApi
+import dev.brahmkshatriya.echo.extension.asmrone.AsmrPlaylist
+import dev.brahmkshatriya.echo.extension.asmrone.MediaTreeItem
+import dev.brahmkshatriya.echo.extension.asmrone.Tag
+import dev.brahmkshatriya.echo.extension.asmrone.Work
+import dev.brahmkshatriya.echo.extension.asmrone.WorksResponse
 
 fun MediaTreeItem.Audio.toMediaItem(album: Album, folderTitle: String): EchoMediaItem {
     return EchoMediaItem.TrackItem(

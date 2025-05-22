@@ -1,13 +1,12 @@
-package dev.brahmkshatriya.echo.extension
+package dev.brahmkshatriya.echo.extension.asmrone
 
 import dev.brahmkshatriya.echo.common.settings.Settings
-import dev.brahmkshatriya.echo.extension.helpers.TimeBasedLRUCache
-import dev.brahmkshatriya.echo.extension.helpers.deepCopy
-import dev.brahmkshatriya.echo.extension.helpers.filterToSubtitled
-import dev.brahmkshatriya.echo.extension.helpers.getTranslationLanguage
-import dev.brahmkshatriya.echo.extension.helpers.removeEmptyFolders
-import dev.brahmkshatriya.echo.extension.helpers.translate
-import io.ktor.http.URLBuilder
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.TimeBasedLRUCache
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.deepCopy
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.filterToSubtitled
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.getTranslationLanguage
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.removeEmptyFolders
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.translate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -22,6 +21,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -509,17 +509,22 @@ class AsmrApi {
     }
 
     private fun parametersBuilder(url: String, parameters: Map<String, Any>): String {
-        val builder = URLBuilder(url)
+        // Parse the base URL
+        val httpUrlBuilder = url.toHttpUrlOrNull()?.newBuilder()
+            ?: throw IllegalArgumentException("Invalid URL format: $url")
+
         parameters.forEach { (key, value) ->
             when (value) {
-                is String -> builder.parameters.append(key, value)
-                is Number -> builder.parameters.append(key, value.toString())
-                is Boolean -> builder.parameters.append(key, value.toString())
+                is String -> httpUrlBuilder.addQueryParameter(key, value)
+                is Number -> httpUrlBuilder.addQueryParameter(key, value.toString())
+                is Boolean -> httpUrlBuilder.addQueryParameter(key, value.toString())
                 else -> throw IllegalArgumentException("Unsupported type: ${value::class}")
             }
         }
-        return builder.buildString()
+
+        return httpUrlBuilder.build().toString()
     }
+
 
     private inline fun <reified T> sendRequest(
         url: String,

@@ -1,6 +1,6 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
-import dev.brahmkshatriya.echo.extension.MediaTreeItem
+import dev.brahmkshatriya.echo.extension.asmrone.MediaTreeItem
 
 fun MediaTreeItem.Folder.getAllTitles(): List<String> {
     val result = mutableListOf<String>()

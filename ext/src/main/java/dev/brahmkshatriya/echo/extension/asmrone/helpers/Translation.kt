@@ -1,16 +1,16 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
 import dev.brahmkshatriya.echo.common.models.Lyrics
-import dev.brahmkshatriya.echo.extension.MediaTreeItem
-import dev.brahmkshatriya.echo.extension.Work
-import dev.brahmkshatriya.echo.extension.WorksResponse
+import dev.brahmkshatriya.echo.extension.asmrone.MediaTreeItem
+import dev.brahmkshatriya.echo.extension.asmrone.Work
+import dev.brahmkshatriya.echo.extension.asmrone.WorksResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import me.bush.translator.Language
-import me.bush.translator.Translator
+import dev.rebelonion.translator.Language
+import dev.rebelonion.translator.Translator
 
 
 suspend fun Work.translate(language: Language): Work {

@@ -1,10 +1,10 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
 import dev.brahmkshatriya.echo.common.models.Date
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.settings.Settings
-import me.bush.translator.Language
+import dev.rebelonion.translator.Language
 
 fun String.buildImageHolder(): ImageHolder {
     return this.toImageHolder(

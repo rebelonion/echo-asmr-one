@@ -1,7 +1,7 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
 import dev.brahmkshatriya.echo.common.models.Lyrics
-import me.bush.translator.Language
+import dev.rebelonion.translator.Language
 
 suspend fun String.toLyrics(language: Language): Lyrics.Timed {
     val isLrcFormat = this.trimStart().startsWith("[") &&

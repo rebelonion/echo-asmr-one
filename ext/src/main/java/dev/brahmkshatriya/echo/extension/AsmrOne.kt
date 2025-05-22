@@ -37,24 +37,28 @@ import dev.brahmkshatriya.echo.common.settings.SettingList
 import dev.brahmkshatriya.echo.common.settings.SettingMultipleChoice
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
-import dev.brahmkshatriya.echo.extension.helpers.findFile
-import dev.brahmkshatriya.echo.extension.helpers.findFolderWithAudio
-import dev.brahmkshatriya.echo.extension.helpers.findMainAudioFolder
-import dev.brahmkshatriya.echo.extension.helpers.getAllAudioFiles
-import dev.brahmkshatriya.echo.extension.helpers.getFolder
-import dev.brahmkshatriya.echo.extension.helpers.getTranslationLanguage
-import dev.brahmkshatriya.echo.extension.helpers.listOf
-import dev.brahmkshatriya.echo.extension.helpers.toAlbum
-import dev.brahmkshatriya.echo.extension.helpers.toLyrics
-import dev.brahmkshatriya.echo.extension.helpers.toMediaItem
-import dev.brahmkshatriya.echo.extension.helpers.toPlaylist
-import dev.brahmkshatriya.echo.extension.helpers.toShelf
-import dev.brahmkshatriya.echo.extension.helpers.toTrack
+import dev.brahmkshatriya.echo.extension.asmrone.AsmrApi
+import dev.brahmkshatriya.echo.extension.asmrone.MediaTreeItem
+import dev.brahmkshatriya.echo.extension.asmrone.Tag
+import dev.brahmkshatriya.echo.extension.asmrone.WorksResponse
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.findFile
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.findFolderWithAudio
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.findMainAudioFolder
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.getAllAudioFiles
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.getFolder
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.getTranslationLanguage
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.listOf
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toAlbum
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toLyrics
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toMediaItem
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toPlaylist
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toShelf
+import dev.brahmkshatriya.echo.extension.asmrone.helpers.toTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import me.bush.translator.Language
+import dev.rebelonion.translator.Language
 
 
 class AsmrOne : ExtensionClient,

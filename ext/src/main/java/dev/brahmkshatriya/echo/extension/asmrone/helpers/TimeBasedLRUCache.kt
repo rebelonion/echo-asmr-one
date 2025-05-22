@@ -1,4 +1,4 @@
-package dev.brahmkshatriya.echo.extension.helpers
+package dev.brahmkshatriya.echo.extension.asmrone.helpers
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
