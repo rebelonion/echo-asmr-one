@@ -22,6 +22,8 @@ import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem.Companion.toMediaItem
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
@@ -54,16 +56,15 @@ import dev.brahmkshatriya.echo.extension.asmrone.helpers.toMediaItem
 import dev.brahmkshatriya.echo.extension.asmrone.helpers.toPlaylist
 import dev.brahmkshatriya.echo.extension.asmrone.helpers.toShelf
 import dev.brahmkshatriya.echo.extension.asmrone.helpers.toTrack
+import dev.rebelonion.translator.Language
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import dev.rebelonion.translator.Language
 
 
-class AsmrOne : ExtensionClient,
-    HomeFeedClient, LibraryFeedClient, AlbumClient, TrackClient, RadioClient,
-    LyricsClient, ArtistClient, ShareClient, SearchFeedClient, LoginClient.CustomInput,
+class AsmrOne : ExtensionClient, HomeFeedClient, LibraryFeedClient, AlbumClient, TrackClient,
+    RadioClient, LyricsClient, ArtistClient, ShareClient, SearchFeedClient, LoginClient.CustomInput,
     PlaylistClient, PlaylistEditClient, PlaylistEditPrivacyClient, TrackLikeClient {
     val asmrApi = AsmrApi()
 
@@ -72,41 +73,33 @@ class AsmrOne : ExtensionClient,
     override val settingItems: List<Setting> by lazy {
         listOf(
             SettingSwitch(
-                title = "Only Show Works With Subtitles",
-                key = "onlyShowSubtitled",
-                defaultValue = false
-            ),
-            SettingSwitch(
-                title = "Only Show SFW Works In Search",
-                key = "onlyShowSfw",
-                defaultValue = false
-            ),
-            SettingList(
-                title = "Site Mirror",
-                key = "siteMirror",
-                entryTitles = listOf("asmr-100", "asmr-200", "asmr-300"),
-                entryValues = listOf("asmr-100", "asmr-200", "asmr-300"),
-                defaultEntryIndex = 1
-            ),
-            SettingList(
+            title = "Only Show Works With Subtitles",
+            key = "onlyShowSubtitled",
+            defaultValue = false
+        ), SettingSwitch(
+            title = "Only Show SFW Works In Search", key = "onlyShowSfw", defaultValue = false
+        ), SettingList(
+            title = "Site Mirror",
+            key = "siteMirror",
+            entryTitles = listOf("asmr-100", "asmr-200", "asmr-300"),
+            entryValues = listOf("asmr-100", "asmr-200", "asmr-300"),
+            defaultEntryIndex = 1
+        ), SettingList(
                 title = "Translation Language",
-                key = "translationLanguage",
-                entryTitles = Language.entries.filter { it.code != "auto" }.sortedBy { it.name }
-                    .map { it.name },
-                entryValues = Language.entries.filter { it.code != "auto" }.sortedBy { it.name }
-                    .map { it.code },
-                defaultEntryIndex = Language.entries.find { it.code == "en" }
-                    ?.let { Language.entries.indexOf(it) - 1 } // -1 to account for auto
-                    ?: 0
-            ),
-            SettingMultipleChoice(
-                title = "Show Tags On Home Page",
-                key = "showTags",
-                entryTitles = getTagNames,
-                entryValues = getTagNames,
-                defaultEntryIndices = emptySet()
-            )
-        )
+            key = "translationLanguage",
+            entryTitles = Language.entries.filter { it.code != "auto" }.sortedBy { it.name }
+                .map { it.name },
+            entryValues = Language.entries.filter { it.code != "auto" }.sortedBy { it.name }
+                .map { it.code },
+            defaultEntryIndex = Language.entries.find { it.code == "en" }
+                ?.let { Language.entries.indexOf(it) - 1 } // -1 to account for auto
+                ?: 0), SettingMultipleChoice(
+            title = "Show Tags On Home Page",
+            key = "showTags",
+            entryTitles = getTagNames,
+            entryValues = getTagNames,
+            defaultEntryIndices = emptySet()
+        ))
     }
 
     private val getTagNames: List<String>
@@ -120,7 +113,7 @@ class AsmrOne : ExtensionClient,
 
     ////--------------------------------------------------------------------------------------------
     //// HomeFeedClient
-    override fun getHomeFeed(tab: Tab?) = PagedData.Single {
+    override fun getHomeFeed(tab: Tab?): Feed = PagedData.Single {
         val showTags = settings.getStringSet("showTags") ?: emptySet()
         val defaultShelfTitles = listOf("Popular", "Recommended", "All")
         val defaultShelves = withContext(Dispatchers.IO) {
@@ -128,18 +121,15 @@ class AsmrOne : ExtensionClient,
                 async {
                     when (shelf) {
                         "Popular" -> getHomeShelf(
-                            title = "Popular",
-                            function = asmrApi::getPopularWorks
+                            title = "Popular", function = asmrApi::getPopularWorks
                         )
 
                         "Recommended" -> getHomeShelf(
-                            title = "Recommended",
-                            function = asmrApi::getRecommendedWorks
+                            title = "Recommended", function = asmrApi::getRecommendedWorks
                         )
 
                         "All" -> getHomeShelf(
-                            title = "All",
-                            function = asmrApi::getWorks
+                            title = "All", function = asmrApi::getWorks
                         )
 
                         else -> null
@@ -161,13 +151,13 @@ class AsmrOne : ExtensionClient,
             }
         }
         (defaultShelves.awaitAll() + tagShelves.awaitAll() + listOf(tagsShelf.await())).filterNotNull()
-    }
+    }.toFeed()
 
     override suspend fun getHomeTabs() = listOf<Tab>()
 
     ////--------------------------------------------------------------------------------------------
     //// LibraryFeedClient
-    override fun getLibraryFeed(tab: Tab?) = PagedData.Single {
+    override fun getLibraryFeed(tab: Tab?): Feed = PagedData.Single {
         val shelves: List<String> = listOf("Playlists", "Favorites")
         withContext(Dispatchers.IO) {
             shelves.map { shelf ->
@@ -180,10 +170,9 @@ class AsmrOne : ExtensionClient,
                         else -> null
                     }
                 }
-            }.awaitAll()
-                .filterNotNull()
+            }.awaitAll().filterNotNull()
         }
-    }
+    }.toFeed()
 
     override suspend fun getLibraryTabs(): List<Tab> = emptyList()
 
@@ -207,21 +196,17 @@ class AsmrOne : ExtensionClient,
                             (contInt + 1).toString()
                         } else null
                     Page(
-                        data = mediaItems,
-                        continuation = newContinuation
+                        data = mediaItems, continuation = newContinuation
                     )
                 }
-            } else null
-        )
+            } else null)
     }
 
     private fun getTagsShelf(): Shelf {
         val title = "Tags"
         val tags = asmrApi.getTags()
         return Shelf.Lists.Categories(
-            title = title,
-            list = tags.map { it.toShelf(asmrApi) },
-            type = Shelf.Lists.Type.Grid
+            title = title, list = tags.map { it.toShelf(asmrApi) }, type = Shelf.Lists.Type.Grid
         )
     }
 
@@ -242,12 +227,10 @@ class AsmrOne : ExtensionClient,
                             (contInt + 1).toString()
                         } else null
                     Page(
-                        data = mediaItems,
-                        continuation = newContinuation
+                        data = mediaItems, continuation = newContinuation
                     )
                 }
-            } else null
-        )
+            } else null)
     }
 
     private suspend fun getFavorites(): Shelf {
@@ -266,12 +249,10 @@ class AsmrOne : ExtensionClient,
                             (contInt + 1).toString()
                         } else null
                     Page(
-                        data = mediaItems,
-                        continuation = newContinuation
+                        data = mediaItems, continuation = newContinuation
                     )
                 }
-            } else null
-        )
+            } else null)
     }
 
     private suspend fun getTagFeed(tag: Tag): Shelf {
@@ -284,8 +265,7 @@ class AsmrOne : ExtensionClient,
                 PagedData.Continuous { continuation ->
                     val contInt = continuation?.toIntOrNull() ?: 0
                     val newResponse = asmrApi.searchWorks(
-                        contInt + 1,
-                        keyword = "\$tag:${tag.i18n.enUs.name ?: tag.name}\$"
+                        contInt + 1, keyword = "\$tag:${tag.i18n.enUs.name ?: tag.name}\$"
                     )
                     val mediaItems = newResponse.works.map { it.toAlbum().toMediaItem() }
                     val newContinuation =
@@ -293,12 +273,10 @@ class AsmrOne : ExtensionClient,
                             (contInt + 1).toString()
                         } else null
                     Page(
-                        data = mediaItems,
-                        continuation = newContinuation
+                        data = mediaItems, continuation = newContinuation
                     )
                 }
-            } else null
-        )
+            } else null)
     }
 
     ////--------------------------------------------------------------------------------------------
@@ -306,8 +284,7 @@ class AsmrOne : ExtensionClient,
     override fun getShelves(album: Album): PagedData<Shelf> = PagedData.Single {
         withContext(Dispatchers.IO) {
             val shelves: MutableList<Shelf> = mutableListOf()
-            val tree = asmrApi.getWorkMediaTree(album.id)
-            /*val mainAudioFolderPath = tree.findMainAudioFolder()
+            val tree = asmrApi.getWorkMediaTree(album.id)/*val mainAudioFolderPath = tree.findMainAudioFolder()
             mainAudioFolderPath?.let { path ->
                 tree.deleteFolderAudio(path) // do I want to do this?
             }*/
@@ -317,9 +294,7 @@ class AsmrOne : ExtensionClient,
             val relatedWorksDeferred = async {
                 val relatedWorks = asmrApi.getRelatedWorks(album.id).works
                 Shelf.Lists.Items(
-                    title = "Related",
-                    list = relatedWorks.map { it.toAlbum().toMediaItem() }
-                )
+                    title = "Related", list = relatedWorks.map { it.toAlbum().toMediaItem() })
             }
             shelves.addAll(shelfDeferred.await())
             shelves.add(relatedWorksDeferred.await())
@@ -343,8 +318,7 @@ class AsmrOne : ExtensionClient,
         mainAudioFolderPath?.let { path ->
             val folder = tree.getFolder(path)
             val tracks: List<Track> = folder.getAllAudioFiles(false)
-                .map { it.toTrack(album = album, folderTitle = folder.title) }
-                .sortedBy { it.title }
+                .map { it.toTrack(album = album, folderTitle = folder.title) }.sortedBy { it.title }
             return@Single tracks
         }
         emptyList()
@@ -353,8 +327,7 @@ class AsmrOne : ExtensionClient,
     override fun getShelves(track: Track): PagedData<Shelf> = PagedData.empty()
 
     override suspend fun loadStreamableMedia(
-        streamable: Streamable,
-        isDownload: Boolean
+        streamable: Streamable, isDownload: Boolean
     ): Streamable.Media {
         if (streamable.id == "OPEN_ALBUM") {
             throw Exception("Open the album below to access the track")
@@ -381,16 +354,13 @@ class AsmrOne : ExtensionClient,
             val folder = tree.findFolderWithAudio(hash)
                 ?: throw Exception("Could not find folder with audio")
             folder.getAllAudioFiles(false)
-                .map { it.toTrack(album = album, folderTitle = folderTitle) }
-                .sortedBy { it.title }
-                .dropWhile { it.id != hash }
-                .drop(1)
+                .map { it.toTrack(album = album, folderTitle = folderTitle) }.sortedBy { it.title }
+                .dropWhile { it.id != hash }.drop(1)
         } else if (radio.id.startsWith("ALBUM_")) {
             val albumId = radio.id.removePrefix("ALBUM_")
             val tree = asmrApi.getWorkMediaTree(albumId)
             val album = asmrApi.getWork(albumId).toAlbum()
-            tree.getAllAudioFiles(true)
-                .map { it.toTrack(album = album, folderTitle = album.title) }
+            tree.getAllAudioFiles(true).map { it.toTrack(album = album, folderTitle = album.title) }
                 .sortedBy { it.title }
         } else if (radio.id.startsWith("ARTIST_")) {
             val works = asmrApi.searchWorks(
@@ -405,8 +375,7 @@ class AsmrOne : ExtensionClient,
                     .map { it.toTrack(album = album, folderTitle = album.title) }
                     .sortedBy { it.title }
             } ?: tree.getAllAudioFiles(true)
-                .map { it.toTrack(album = album, folderTitle = album.title) }
-                .sortedBy { it.title }
+                .map { it.toTrack(album = album, folderTitle = album.title) }.sortedBy { it.title }
         } else if (radio.id.startsWith("USER_")) {
             val works = asmrApi.getRecommendedWorks().works
             val work = works.random()
@@ -417,8 +386,7 @@ class AsmrOne : ExtensionClient,
                     .map { it.toTrack(album = album, folderTitle = album.title) }
                     .sortedBy { it.title }
             } ?: tree.getAllAudioFiles(true)
-                .map { it.toTrack(album = album, folderTitle = album.title) }
-                .sortedBy { it.title }
+                .map { it.toTrack(album = album, folderTitle = album.title) }.sortedBy { it.title }
         } else if (radio.id.startsWith("PLAYLIST_")) {
             val playlistId = radio.id.removePrefix("PLAYLIST_")
             val works = asmrApi.getPlaylistWorks(playlistId, 1).works
@@ -431,8 +399,7 @@ class AsmrOne : ExtensionClient,
                     .map { it.toTrack(album = album, folderTitle = album.title) }
                     .sortedBy { it.title }
             } ?: tree.getAllAudioFiles(true)
-                .map { it.toTrack(album = album, folderTitle = album.title) }
-                .sortedBy { it.title }
+                .map { it.toTrack(album = album, folderTitle = album.title) }.sortedBy { it.title }
         } else {
             emptyList()
         }
@@ -457,30 +424,22 @@ class AsmrOne : ExtensionClient,
     }
 
     override suspend fun radio(album: Album) = Radio(
-        id = "ALBUM_${album.id}",
-        title = album.title,
-        cover = album.cover
+        id = "ALBUM_${album.id}", title = album.title, cover = album.cover
     )
 
 
     override suspend fun radio(artist: Artist) = Radio(
-        id = "ARTIST_${artist.id}",
-        title = artist.name,
-        cover = artist.cover
+        id = "ARTIST_${artist.id}", title = artist.name, cover = artist.cover
     )
 
 
     override suspend fun radio(user: User) = Radio(
-        id = "USER_${user.id}",
-        title = user.name,
-        cover = user.cover
+        id = "USER_${user.id}", title = user.name, cover = user.cover
     )
 
 
     override suspend fun radio(playlist: Playlist) = Radio(
-        id = "PLAYLIST_${playlist.id}",
-        title = playlist.title,
-        cover = playlist.cover
+        id = "PLAYLIST_${playlist.id}", title = playlist.title, cover = playlist.cover
     )
 
     ////--------------------------------------------------------------------------------------------
@@ -515,12 +474,11 @@ class AsmrOne : ExtensionClient,
 
     private suspend fun getLyrics(workId: String, untranslatedTitle: String): Lyrics.Timed? {
         val tree = asmrApi.getWorkMediaTree(workId)
-        val file = tree.findFile("$untranslatedTitle.vtt") as? MediaTreeItem.Text
-            ?: tree.findFile(
-                "${
-                    untranslatedTitle.removeSuffix(".mp3").removeSuffix(".wav")
-                }.lrc"
-            ) as? MediaTreeItem.Text ?: return null
+        val file = tree.findFile("$untranslatedTitle.vtt") as? MediaTreeItem.Text ?: tree.findFile(
+            "${
+                untranslatedTitle.removeSuffix(".mp3").removeSuffix(".wav")
+            }.lrc"
+        ) as? MediaTreeItem.Text ?: return null
         return asmrApi.getSubTitleFile(file.mediaDownloadUrl)
             .toLyrics(settings.getTranslationLanguage())
     }
@@ -538,8 +496,7 @@ class AsmrOne : ExtensionClient,
                     (contInt + 1).toString()
                 } else null
             Page(
-                data = mediaItems.map { it.toShelf() },
-                continuation = newContinuation
+                data = mediaItems.map { it.toShelf() }, continuation = newContinuation
             )
         }
 
@@ -579,8 +536,7 @@ class AsmrOne : ExtensionClient,
         }
         val newOptions = mutableListOf(
             QuickSearchItem.Query(
-                query = "$combinedUsedTags $queryWithoutTags $lastWord",
-                searched = false
+                query = "$combinedUsedTags $queryWithoutTags $lastWord", searched = false
             )
         )
         val newQueries = newTags.map { tag ->
@@ -593,8 +549,8 @@ class AsmrOne : ExtensionClient,
         return newOptions
     }
 
-    override fun searchFeed(query: String, tab: Tab?): PagedData<Shelf> =
-        PagedData.Continuous { continuation ->
+    override fun searchFeed(query: String, tab: Tab?) =
+        PagedData.Continuous<Shelf> { continuation ->
             val contInt = continuation?.toIntOrNull() ?: 0
             val newResponse = asmrApi.searchWorks(contInt + 1, keyword = query)
             val mediaItems: List<EchoMediaItem.Lists.AlbumItem> =
@@ -604,11 +560,10 @@ class AsmrOne : ExtensionClient,
                     (contInt + 1).toString()
                 } else null
             Page(
-                data = mediaItems.map { it.toShelf() },
-                continuation = newContinuation
+                data = mediaItems.map { it.toShelf() }, continuation = newContinuation
             )
 
-        }
+        }.toFeed()
 
     override suspend fun searchTabs(query: String): List<Tab> = emptyList()
 
@@ -626,8 +581,7 @@ class AsmrOne : ExtensionClient,
                     key = "username",
                     label = "Username",
                     isRequired = true,
-                ),
-                LoginClient.InputField(
+                ), LoginClient.InputField(
                     type = LoginClient.InputField.Type.Password,
                     key = "password",
                     label = "Password",
@@ -666,8 +620,7 @@ class AsmrOne : ExtensionClient,
                     (contInt + 1).toString()
                 } else null
             Page(
-                data = mediaItems.map { it.toShelf() },
-                continuation = newContinuation
+                data = mediaItems.map { it.toShelf() }, continuation = newContinuation
             )
         }
 
@@ -682,10 +635,7 @@ class AsmrOne : ExtensionClient,
     ////--------------------------------------------------------------------------------------------
     //// PlaylistEditClient
     override suspend fun addTracksToPlaylist(
-        playlist: Playlist,
-        tracks: List<Track>,
-        index: Int,
-        new: List<Track>
+        playlist: Playlist, tracks: List<Track>, index: Int, new: List<Track>
     ) {
         val trackIds =
             new.map { it.album?.id ?: it.extras["id"] ?: throw Exception("Expected album id") }
@@ -694,9 +644,7 @@ class AsmrOne : ExtensionClient,
     }
 
     override suspend fun removeTracksFromPlaylist(
-        playlist: Playlist,
-        tracks: List<Track>,
-        indexes: List<Int>
+        playlist: Playlist, tracks: List<Track>, indexes: List<Int>
     ) {
         val trackIds =
             tracks.map { it.album?.id ?: it.extras["id"] ?: throw Exception("Expected album id") }
@@ -716,9 +664,7 @@ class AsmrOne : ExtensionClient,
     }
 
     override suspend fun editPlaylistMetadata(
-        playlist: Playlist,
-        title: String,
-        description: String?
+        playlist: Playlist, title: String, description: String?
     ) {
         val newTitle = when (playlist.title) {
             "Marked" -> "Marked"
@@ -730,10 +676,7 @@ class AsmrOne : ExtensionClient,
 
 
     override suspend fun moveTrackInPlaylist(
-        playlist: Playlist,
-        tracks: List<Track>,
-        fromIndex: Int,
-        toIndex: Int
+        playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int
     ) = throw ClientException.NotSupported("Move track in playlist not supported")
 
     ////--------------------------------------------------------------------------------------------
