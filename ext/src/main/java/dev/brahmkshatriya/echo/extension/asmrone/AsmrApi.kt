@@ -351,9 +351,9 @@ class AsmrApi {
         return response
     }
 
-    fun getSubTitleFile(url: String): String {
+    suspend fun getSubTitleFile(url: String): String {
         val request = requestBuilder(url, RequestType.GET)
-        val response = client.newCall(request).execute()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to send request: ${response.code}: ${response.body.string()}")
         }
