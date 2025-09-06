@@ -4,7 +4,7 @@ import java.io.IOException
 plugins {
     id("java-library")
     id("org.jetbrains.kotlin.jvm")
-    id("com.gradleup.shadow") version "8.3.0"
+    id("com.gradleup.shadow") version "9.1.0"
     kotlin("plugin.serialization") version "2.1.0"
 }
 
@@ -18,21 +18,17 @@ kotlin {
 }
 
 dependencies {
-    val libVersion: String by project
     implementation("com.github.rebelonion:translator:1.1.2") {
         exclude("org.jetbrains.kotlin", "kotlin-stdlib")
         exclude("org.jetbrains.kotlinx", "kotlinx-coroutines-core")
         exclude("org.jetbrains.kotlinx", "kotlinx-serialization-json")
         exclude("com.squareup.okhttp3", "okhttp")
     }
-    compileOnly("com.github.brahmkshatriya:echo:$libVersion")
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
-    //compile only kotlinx serialization
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+    compileOnly("dev.brahmkshatriya.echo:common:1.0")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }
-
-// Extension properties goto `gradle.properties` to set values
 
 val extType: String by project
 val extId: String by project

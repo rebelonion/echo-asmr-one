@@ -5,23 +5,18 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
-import dev.brahmkshatriya.echo.common.models.EchoMediaItem.Companion.toMediaItem
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.extension.AsmrOne.PendingAction
 import dev.brahmkshatriya.echo.extension.asmrone.AsmrApi
 import dev.brahmkshatriya.echo.extension.asmrone.AsmrPlaylist
 import dev.brahmkshatriya.echo.extension.asmrone.MediaTreeItem
 import dev.brahmkshatriya.echo.extension.asmrone.Tag
 import dev.brahmkshatriya.echo.extension.asmrone.Work
 import dev.brahmkshatriya.echo.extension.asmrone.WorksResponse
-
-fun MediaTreeItem.Audio.toMediaItem(album: Album, folderTitle: String): EchoMediaItem {
-    return EchoMediaItem.TrackItem(
-        this.toTrack(album, folderTitle)
-    )
-}
 
 fun MediaTreeItem.Audio.toTrack(album: Album, folderTitle: String): Track {
     return Track(
@@ -33,7 +28,11 @@ fun MediaTreeItem.Audio.toTrack(album: Album, folderTitle: String): Track {
         duration = (duration * 1000).toLong(),
         isExplicit = album.isExplicit,
         releaseDate = album.releaseDate,
-        isLiked = (album.subtitle?.findAll('★')?.size ?: 0) > 3,
+        isLikeable = true,
+        isRadioSupported = true,
+        isShareable = true,
+        isPlayable = Track.Playable.Yes,
+        isSaveable = true,
         streamables = listOf(
             Streamable.server(
                 id = mediaStreamUrl,
@@ -44,64 +43,77 @@ fun MediaTreeItem.Audio.toTrack(album: Album, folderTitle: String): Track {
         extras = mapOf(
             "folderTitle" to folderTitle,
             "untranslatedTitle" to untranslatedTitle,
-            "id" to album.id
+            "id" to album.id,
+            "isLiked" to (album.extras["isLiked"] ?: "false")
         )
     )
 }
 
 fun MediaTreeItem.Folder.toCategory(album: Album): Shelf.Category {
     return Shelf.Category(
-        title = title,
-        items = PagedData.Single {
+        title = title, feed = PagedData.Single {
             children.mapNotNull { it.toShelf(album) }
-        }
+        }.toFeed(), id = untranslatedTitle
     )
 }
 
 fun MediaTreeItem.toShelf(album: Album): Shelf? {
     return when (this) {
         is MediaTreeItem.Folder -> this.toCategory(album)
-        is MediaTreeItem.Audio -> this.toMediaItem(album, this.title).toShelf()
+        is MediaTreeItem.Audio -> this.toTrack(album, this.title).toShelf()
         else -> null
     }
 }
 
-fun Work.toAlbum(): Album {
-    var sustitleString = ""
+fun Work.toAlbum(pendingLikes: MutableMap<Int, PendingAction>): Album {
+    pendingLikes.remove(id)
+    var subtitleString = ""
     userRating?.let {
-        for (i in 1..userRating) sustitleString += "★"
-        for (i in userRating until 5) sustitleString += "☆"
+        subtitleString += "★".repeat(userRating)
+        subtitleString += "☆".repeat(5 - userRating)
     }
 
     return Album(
         id = id.toString(),
         title = title,
-        subtitle = sustitleString.ifEmpty { name },
-        tracks = 0,
+        subtitle = subtitleString.ifEmpty { name },
+        trackCount = 0,
+        isLikeable = true,
+        isRadioSupported = true,
+        isShareable = true,
+        isSaveable = true,
         cover = mainCoverUrl.buildImageHolder(),
         artists = vas.map { Artist(it.id, it.name) },
         releaseDate = release.toDate(),
         description = this.createDescription(),
         isExplicit = nsfw,
+        extras = mapOf(
+            "isLiked" to ((userRating ?: 0) > 3).toString(),
+        )
     )
 }
 
 //THIS IS A FAKE TRACK DON'T USE IT AS A REAL TRACK
-fun Work.toTrack(): Track {
+fun Work.toFakeTrack(): Track {
     return Track(
         id = id.toString(),
-        title = "Open the album below to access the track\n\n",
-        album = toAlbum(),
+        title = title,
+        album = toAlbum(mutableMapOf()),
         artists = vas.map { Artist(it.id, it.name) },
         cover = mainCoverUrl.buildImageHolder(),
         duration = 0,
         isExplicit = nsfw,
         releaseDate = release.toDate(),
+        isPlayable = Track.Playable.No(reason = "Album Required"),
+        isRadioSupported = false,
+        isShareable = false,
+        isLikeable = false,
+        isSaveable = false,
         streamables = Streamable.server(
-                id = "OPEN_ALBUM",
-                quality = 1,
-                title = null,
-            ).listOf()
+            id = "OPEN_ALBUM",
+            quality = 1,
+            title = null,
+        ).listOf()
 
     )
 }
@@ -109,43 +121,33 @@ fun Work.toTrack(): Track {
 fun WorksResponse.filterToSubtitled(filter: Boolean): WorksResponse {
     if (!filter) return this
     return WorksResponse(
-        works = works.filter { it.hasSubtitle },
-        pagination = pagination
+        works = works.filter { it.hasSubtitle }, pagination = pagination
     )
 }
 
-fun Tag.toShelf(asmrApi: AsmrApi): Shelf.Category {
+fun Tag.toShelf(asmrApi: AsmrApi, pendingLikes: MutableMap<Int, PendingAction>): Shelf.Category {
     return Shelf.Category(
+        id = id.toString(),
         title = i18n.enUs.name ?: name,
-        items = PagedData.Continuous { continuation ->
+        feed = PagedData.Continuous<Shelf> { continuation ->
             val contInt = continuation?.toIntOrNull() ?: 0
             val newResponse =
-                asmrApi.searchWorks(contInt + 1, keyword = "\$tag:${i18n.enUs.name ?: name}\$")
-            val mediaItems: List<EchoMediaItem.Lists.AlbumItem> =
-                newResponse.works.map { it.toAlbum().toMediaItem() }
+                asmrApi.searchWorks(contInt + 1, keyword = "\$tag:${i18n.enUs.name ?: name}$")
+            val mediaItems: List<EchoMediaItem> = newResponse.works.map { it.toAlbum(pendingLikes) }
             val newContinuation =
                 if (newResponse.pagination.currentPage * newResponse.pagination.pageSize < newResponse.pagination.totalCount) {
                     (contInt + 1).toString()
                 } else null
             Page(
-                data = mediaItems.map { it.toShelf() },
-                continuation = newContinuation
+                data = mediaItems.map { it.toShelf() }, continuation = newContinuation
             )
-        }
+        }.toFeed()
     )
 }
 
 
 fun Work.createDescription(): String {
-    return "Tags: ${tags.joinToString { it.i18n.enUs.name ?: it.name }}\n" +
-            "Full Title: ${title}\n" +
-            "Downloads: $dlCount, Price: $price, Reviews: $reviewCount, Rating: $rateAverage2dp\n"
-}
-
-fun AsmrPlaylist.toMediaItem(): EchoMediaItem.Lists.PlaylistItem {
-    return EchoMediaItem.Lists.PlaylistItem(
-        this.toPlaylist()
-    )
+    return "Tags: ${tags.joinToString { it.i18n.enUs.name ?: it.name }}\n" + "Full Title: ${title}\n" + "Downloads: $dlCount, Price: $price, Reviews: $reviewCount, Rating: $rateAverage2dp\n"
 }
 
 fun AsmrPlaylist.toPlaylist(): Playlist {
@@ -161,7 +163,7 @@ fun AsmrPlaylist.toPlaylist(): Playlist {
         description = description,
         creationDate = createdAt.toDate(),
         isPrivate = privacy == 0,
-        tracks = worksCount,
+        trackCount = worksCount.toLong(),
         isEditable = true
     )
 }
