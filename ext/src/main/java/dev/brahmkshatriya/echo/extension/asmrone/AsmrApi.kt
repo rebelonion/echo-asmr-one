@@ -407,6 +407,7 @@ class AsmrApi {
         }
         requestBuilder.addHeader("Origin", "https://asmr.one")
         requestBuilder.addHeader("Referer", "https://asmr.one/")
+        requestBuilder.addHeader("Accept-Language", "zh,zh;q=0.9")
         if (host != null) {
             requestBuilder.addHeader("Host", host)
         }
